@@ -1,11 +1,11 @@
 import { Product, LabelSizeConfig } from './types';
 
 export const PRODUCTS: Product[] = [
-  { id: '1', name: 'Довге волокно', sku: 'LF' },
-  { id: '2', name: 'Коротке волокно', sku: 'SF' },
-  { id: '3', name: 'Костра калібрована', sku: 'CS' },
-  { id: '4', name: 'Костра некалібрована', sku: 'NCS' },
-  { id: '5', name: 'Пил костри', sku: 'DS' },
+  { id: '1', name: 'Довге волокно', sku: 'LF', category: 'fiber' },
+  { id: '2', name: 'Коротке волокно', sku: 'SF', category: 'fiber' },
+  { id: '3', name: 'Костра калібрована', sku: 'CS', category: 'shiv' },
+  { id: '4', name: 'Костра некалібрована', sku: 'NCS', category: 'shiv' },
+  { id: '5', name: 'Пил костри', sku: 'DS', category: 'dust' },
 ];
 
 export const INITIAL_SERIAL = 1;

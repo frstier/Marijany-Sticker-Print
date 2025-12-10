@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Product, LabelData, PrinterStatus, ZebraDevice, LabelSizeConfig } from './types';
-import { PRODUCTS, INITIAL_SERIAL, LABEL_SIZES } from './constants';
+import { PRODUCTS, LABEL_SIZES, INITIAL_SERIAL } from './constants';
 import { zebraService } from './services/zebraService';
 import Keypad from './components/Keypad';
 import LabelPreview from './components/LabelPreview';
+import ProductSelect from './components/ProductSelect';
 
 // --- ICONS ---
 const PrinterIcon = () => (
@@ -62,16 +63,24 @@ const ExternalLinkIcon = () => (
     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
 );
 
-const LOCAL_STORAGE_KEY = 'zebra_print_history_v1';
-const SAVED_PRINTER_UID_KEY = 'zebra_saved_printer_uid';
+// --- STORAGE KEYS ---
+const LOCAL_STORAGE_HISTORY_KEY = 'zebra_print_history_v1';
+const LOCAL_STORAGE_COUNTERS_KEY = 'zebra_product_counters_v1';
+const SAVED_PRINTER_CONFIG_KEY = 'zebra_printer_config_v1';
 const SAVED_AGENT_IP_KEY = 'zebra_agent_ip';
 
 export default function App() {
   // --- State ---
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [weight, setWeight] = useState<string>('');
-  const [serialNumber, setSerialNumber] = useState<number>(INITIAL_SERIAL);
   
+  // NEW: Object to store counters for each product ID { "1": 105, "2": 300 }
+  const [productCounters, setProductCounters] = useState<Record<string, number>>({});
+  
+  // Temporary editing state for the currently displayed serial number
+  const [isSerialEditing, setIsSerialEditing] = useState(false);
+  const [tempSerialInput, setTempSerialInput] = useState<string>("");
+
   // Printer State
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus>(PrinterStatus.DISCONNECTED);
   const [printer, setPrinter] = useState<ZebraDevice | null>(null);
@@ -85,21 +94,25 @@ export default function App() {
   // Admin Mode
   const [isAdminMode, setIsAdminMode] = useState(false);
   const adminClicksRef = useRef(0);
+  const lastAdminClickTimeRef = useRef(0);
   
   // History State
   const [history, setHistory] = useState<Array<LabelData & { timestamp: string }>>([]);
   
-  // Serial Editing State
-  const [isSerialEditing, setIsSerialEditing] = useState(false);
   const lastClickTimeRef = useRef<number>(0);
   
   // Derived State
   const today = new Date().toLocaleDateString('uk-UA');
   
+  // Determine current serial number based on selected product
+  const currentSerialNumber = selectedProduct 
+    ? (productCounters[selectedProduct.id] ?? INITIAL_SERIAL) 
+    : 0;
+
   const labelData: LabelData = {
     product: selectedProduct,
     weight,
-    serialNumber,
+    serialNumber: currentSerialNumber,
     date: today
   };
 
@@ -113,30 +126,63 @@ export default function App() {
 
   // 1. Connect Printer on Mount
   useEffect(() => {
-    // Try to recover last printer or get default
     autoConnectPrinter();
   }, []);
 
-  // 2. Load History
+  // 2. Load History & Counters
   useEffect(() => {
       try {
-          const savedHistory = localStorage.getItem(LOCAL_STORAGE_KEY);
+          const savedHistory = localStorage.getItem(LOCAL_STORAGE_HISTORY_KEY);
           if (savedHistory) {
               setHistory(JSON.parse(savedHistory));
           }
+
+          // Load Product Counters
+          const savedCounters = localStorage.getItem(LOCAL_STORAGE_COUNTERS_KEY);
+          if (savedCounters) {
+              setProductCounters(JSON.parse(savedCounters));
+          } else {
+              // Initialize defaults if empty
+              const initial: Record<string, number> = {};
+              PRODUCTS.forEach(p => initial[p.id] = INITIAL_SERIAL);
+              setProductCounters(initial);
+          }
       } catch (e) {
-          console.error("Failed to load history", e);
+          console.error("Failed to load local storage data", e);
       }
   }, []);
 
-  // 3. Save History
+  // 2.5 Listen for cross-tab storage changes (Sync)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === LOCAL_STORAGE_COUNTERS_KEY && e.newValue) {
+        console.log("Syncing counters from other tab");
+        setProductCounters(JSON.parse(e.newValue));
+      }
+      if (e.key === LOCAL_STORAGE_HISTORY_KEY && e.newValue) {
+        setHistory(JSON.parse(e.newValue));
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // 3. Save History & Counters
   useEffect(() => {
       try {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(history));
-      } catch (e) {
-          console.error("Failed to save history", e);
-      }
+          localStorage.setItem(LOCAL_STORAGE_HISTORY_KEY, JSON.stringify(history));
+      } catch (e) { console.error(e); }
   }, [history]);
+
+  useEffect(() => {
+      try {
+          localStorage.setItem(LOCAL_STORAGE_COUNTERS_KEY, JSON.stringify(productCounters));
+      } catch (e) { console.error(e); }
+  }, [productCounters]);
+
+
+  // --- Helper Methods ---
 
   const saveAgentIp = () => {
       localStorage.setItem(SAVED_AGENT_IP_KEY, agentIp);
@@ -148,26 +194,30 @@ export default function App() {
   const autoConnectPrinter = async () => {
     setPrinterStatus(PrinterStatus.CONNECTING);
     setPrinter(null);
-
-    // Try to find previously saved printer
-    const savedUid = localStorage.getItem(SAVED_PRINTER_UID_KEY);
-
-    try {
-        if (savedUid) {
-            // We have to scan to find the device object that matches the UID
-            const devices = await zebraService.getAllPrinters();
-            const found = devices.find(d => d.uid === savedUid);
-            if (found) {
-                setPrinter(found);
-                setPrinterStatus(PrinterStatus.CONNECTED);
-                return;
-            }
+    
+    // 1. Try to load saved FULL configuration from LocalStorage (Fastest)
+    const savedConfig = localStorage.getItem(SAVED_PRINTER_CONFIG_KEY);
+    if (savedConfig) {
+        try {
+            const device = JSON.parse(savedConfig) as ZebraDevice;
+            // Optimistically set connected. The service will handle re-initialization during print.
+            console.log("Restored printer config:", device.name);
+            setPrinter(device);
+            setPrinterStatus(PrinterStatus.CONNECTED);
+            return;
+        } catch (e) {
+            console.error("Error parsing saved printer config", e);
+            localStorage.removeItem(SAVED_PRINTER_CONFIG_KEY);
         }
-        
-        // If not found or no saved UID, fallback to default
+    }
+
+    // 2. Fallback: Scan for default (Slower)
+    try {
         const device = await zebraService.getDefaultPrinter();
         setPrinter(device);
         setPrinterStatus(PrinterStatus.CONNECTED);
+        // Save this default as the config automatically
+        localStorage.setItem(SAVED_PRINTER_CONFIG_KEY, JSON.stringify(device));
     } catch (error: any) {
         setPrinterStatus(PrinterStatus.ERROR);
     }
@@ -191,7 +241,6 @@ export default function App() {
   };
 
   const handleFixSsl = () => {
-      // Use configured IP
       const url = `https://${agentIp}:9101/ssl_support`;
       window.open(url, '_blank');
   };
@@ -199,19 +248,30 @@ export default function App() {
   const selectPrinter = (device: ZebraDevice) => {
       setPrinter(device);
       setPrinterStatus(PrinterStatus.CONNECTED);
-      localStorage.setItem(SAVED_PRINTER_UID_KEY, device.uid);
-      setDiscoveredPrinters([]); // Clear search results
+      // Save full config
+      localStorage.setItem(SAVED_PRINTER_CONFIG_KEY, JSON.stringify(device));
+      setDiscoveredPrinters([]); 
   };
 
   const handleSettingsTitleClick = () => {
-      adminClicksRef.current += 1;
-      if (adminClicksRef.current >= 5) {
-          setIsAdminMode(prev => !prev);
+      const now = Date.now();
+      
+      // Reset counter if too much time passed between clicks (e.g., > 1 second)
+      if (now - lastAdminClickTimeRef.current > 1000) {
           adminClicksRef.current = 0;
+      }
+      
+      adminClicksRef.current += 1;
+      lastAdminClickTimeRef.current = now;
+
+      // Trigger on 3rd click (Triple Tap)
+      if (adminClicksRef.current >= 3) {
+          setIsAdminMode(prev => !prev);
+          adminClicksRef.current = 0; // Reset after toggle
       }
   };
 
-  // --- Handlers ---
+  // --- Input Handlers ---
 
   const handleWeightKeyPress = (key: string) => {
     if (key === '.' && weight.includes('.')) return;
@@ -227,16 +287,20 @@ export default function App() {
     setWeight('');
   };
 
-  const handleProductChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const prod = PRODUCTS.find(p => p.id === e.target.value);
-    setSelectedProduct(prod || null);
+  const handleProductSelect = (product: Product) => {
+    setSelectedProduct(product);
   };
 
+  // --- Serial Number Logic ---
+
   const handleEditIconClick = () => {
+      if (!selectedProduct) return;
+      
       const now = Date.now();
       const timeDiff = now - lastClickTimeRef.current;
       if (timeDiff < 1000) {
           setIsSerialEditing(true);
+          setTempSerialInput(currentSerialNumber.toString());
           lastClickTimeRef.current = 0; 
       } else {
           lastClickTimeRef.current = now;
@@ -244,9 +308,16 @@ export default function App() {
   };
 
   const handleSerialBlur = () => {
+      if (!selectedProduct) return;
       setIsSerialEditing(false);
-      if (Number.isNaN(serialNumber) || serialNumber < 1) {
-          setSerialNumber(1);
+      
+      const newVal = parseInt(tempSerialInput);
+      if (!Number.isNaN(newVal) && newVal >= 1) {
+          // Update the counter for THIS specific product
+          setProductCounters(prev => ({
+              ...prev,
+              [selectedProduct.id]: newVal
+          }));
       }
   };
 
@@ -266,7 +337,7 @@ export default function App() {
         productName: selectedProduct.name,
         sku: selectedProduct.sku,
         weight: weight,
-        serialNumber: serialNumber.toString()
+        serialNumber: currentSerialNumber.toString()
     });
 
     let success = false;
@@ -280,15 +351,24 @@ export default function App() {
     }
 
     if (success) {
+        // Log to history
         const record = { ...labelData, timestamp: new Date().toISOString() };
         setHistory(prev => [...prev, record]);
 
-        setSerialNumber(prev => prev + 1);
+        // Increment counter for THIS SPECIFIC PRODUCT
+        // Use ?? INITIAL_SERIAL to ensure we don't restart from 1 if undefined/zero-like
+        setProductCounters(prev => ({
+            ...prev,
+            [selectedProduct.id]: (prev[selectedProduct.id] ?? INITIAL_SERIAL) + 1
+        }));
+
         setWeight('');
     } else {
         alert("Помилка друку.");
     }
   };
+
+  // --- Export Logic ---
 
   const generateCSV = (): File => {
     const BOM = "\uFEFF"; 
@@ -355,7 +435,6 @@ export default function App() {
     }
 
     handleExportHistory(); 
-    
     setTimeout(() => {
         const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body + "\n\n(Увага: Файл CSV був завантажений на ваш пристрій. Будь ласка, прикріпіть його до цього листа вручну.)")}`;
         window.location.href = mailtoLink;
@@ -395,7 +474,8 @@ export default function App() {
                 <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
                     <button 
                         onClick={handleSettingsTitleClick}
-                        className="text-xl font-bold text-slate-800 flex items-center gap-2 select-none"
+                        className="text-xl font-bold text-slate-800 flex items-center gap-2 select-none active:scale-95 transition-transform"
+                        title="Натисніть 3 рази для адміністрування"
                     >
                         <SettingsIcon />
                         Налаштування
@@ -663,25 +743,22 @@ export default function App() {
                 
                 {/* LEFT SIDE: Product & Serial */}
                 <div className="flex flex-col gap-4 md:gap-6">
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6 flex-1">
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6 flex-1 z-20">
                         <label className="block mb-2 text-sm font-medium text-slate-700 uppercase tracking-wide">Продукція</label>
-                        <select 
-                            value={selectedProduct?.id || ''} 
-                            onChange={handleProductChange}
-                            className="bg-slate-50 border border-slate-300 text-slate-900 text-lg rounded-lg focus:ring-[#115740] focus:border-[#115740] block w-full p-3 md:p-4 appearance-none"
-                            style={{ backgroundImage: 'none' }} 
-                        >
-                            <option value="" disabled>-- Оберіть товар --</option>
-                            {PRODUCTS.map(p => (
-                                <option key={p.id} value={p.id}>{p.name}</option>
-                            ))}
-                        </select>
+                        {/* New Custom Select Component */}
+                        <ProductSelect 
+                            products={PRODUCTS}
+                            selectedProduct={selectedProduct}
+                            onSelect={handleProductSelect}
+                        />
                     </div>
 
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6 transition-all">
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6 transition-all z-10">
                         <div className="flex justify-between items-center mb-2">
-                             <label className="block text-sm font-medium text-slate-700 uppercase tracking-wide">Серійний номер</label>
-                             {!isSerialEditing && (
+                             <label className="block text-sm font-medium text-slate-700 uppercase tracking-wide">
+                                 Серійний номер {selectedProduct && `(${selectedProduct.sku})`}
+                             </label>
+                             {!isSerialEditing && selectedProduct && (
                                  <button 
                                     onClick={handleEditIconClick}
                                     className="p-2 text-slate-400 hover:text-[#115740] hover:bg-green-50 rounded-full transition-colors active:scale-95"
@@ -693,13 +770,13 @@ export default function App() {
                         </div>
                         
                         <div className="h-14 md:h-16 flex items-center">
-                            {isSerialEditing ? (
+                            {isSerialEditing && selectedProduct ? (
                                 <div className="w-full flex gap-2">
                                      <input 
                                         type="number" 
                                         autoFocus
-                                        value={serialNumber} 
-                                        onChange={(e) => setSerialNumber(parseInt(e.target.value) || 0)}
+                                        value={tempSerialInput} 
+                                        onChange={(e) => setTempSerialInput(e.target.value)}
                                         onBlur={handleSerialBlur}
                                         onKeyDown={(e) => e.key === 'Enter' && handleSerialBlur()}
                                         className="h-14 bg-white border border-[#115740] ring-2 ring-green-100 rounded-lg px-4 text-2xl font-mono font-bold text-slate-900 block w-full" 
@@ -713,22 +790,31 @@ export default function App() {
                                 </div>
                             ) : (
                                 <div 
-                                    className="w-full h-full bg-slate-100 border border-slate-300 rounded-lg flex items-center justify-center text-3xl font-mono font-bold text-slate-800 tracking-wider cursor-pointer select-none"
+                                    className={`w-full h-full border rounded-lg flex items-center justify-center text-3xl font-mono font-bold tracking-wider select-none ${
+                                        selectedProduct 
+                                        ? 'bg-slate-100 border-slate-300 text-slate-800 cursor-pointer' 
+                                        : 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
+                                    }`}
                                     onClick={handleEditIconClick}
                                 >
-                                    #{serialNumber}
+                                    {selectedProduct ? `#${currentSerialNumber}` : '---'}
                                 </div>
                             )}
                         </div>
                         <p className="text-[10px] text-slate-400 mt-2 text-center">
-                           {isSerialEditing ? 'Введіть нове значення' : 'Для редагування натисніть двічі на олівець'}
+                           {isSerialEditing 
+                             ? 'Введіть нове значення' 
+                             : selectedProduct 
+                                ? 'Для редагування натисніть двічі на олівець'
+                                : 'Оберіть продукт для перегляду номера'
+                            }
                         </p>
                     </div>
 
                 </div>
 
                 {/* RIGHT SIDE: Weight Input */}
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6 flex flex-col h-full">
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6 flex flex-col h-full z-10">
                     <div className="flex justify-between items-center mb-3">
                         <label className="text-sm font-medium text-slate-700 uppercase tracking-wide">Вага (кг)</label>
                         <span className="text-[10px] uppercase bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-bold">Manual</span>
@@ -756,7 +842,7 @@ export default function App() {
         </div>
 
         {/* RIGHT COLUMN: Preview & Action */}
-        <div className="lg:col-span-5 flex flex-col gap-6">
+        <div className="lg:col-span-5 flex flex-col gap-6 z-0">
             <div className="bg-slate-800 rounded-xl shadow-lg p-4 md:p-6 text-white lg:sticky lg:top-24">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-lg font-semibold flex items-center gap-2">

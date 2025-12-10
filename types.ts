@@ -1,7 +1,10 @@
+export type ProductCategory = 'fiber' | 'shiv' | 'dust';
+
 export interface Product {
   id: string;
   name: string;
   sku: string;
+  category: ProductCategory;
 }
 
 export interface LabelData {

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Marijany Sticker Print</string>
+    <string name="title_activity_main">Marijany Sticker Print</string>
+    <string name="package_name">com.marijany.stickerprint</string>
+    <string name="custom_url_scheme">com.marijany.stickerprint</string>
+</resources>

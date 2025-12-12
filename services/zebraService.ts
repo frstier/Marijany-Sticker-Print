@@ -5,7 +5,7 @@ import { ZebraDevice } from '../types';
  * Assumes SDK is loaded globally via index.html
  */
 class ZebraService {
-  
+
   /**
    * Waits for the SDK to be available on the window object.
    * Retries for up to 3 seconds.
@@ -13,23 +13,23 @@ class ZebraService {
   private async waitForSdk(timeoutMs = 3000): Promise<boolean> {
     // Immediate check
     if (typeof window !== 'undefined' && window.BrowserPrint) {
-        return true;
+      return true;
     }
 
     console.log("Waiting for Zebra SDK to initialize...");
     const startTime = Date.now();
     return new Promise((resolve) => {
-        const interval = setInterval(() => {
-            if (window.BrowserPrint) {
-                console.log("Zebra SDK detected!");
-                clearInterval(interval);
-                resolve(true);
-            } else if (Date.now() - startTime > timeoutMs) {
-                console.error("Zebra SDK wait timeout. BrowserPrint is undefined.");
-                clearInterval(interval);
-                resolve(false);
-            }
-        }, 100);
+      const interval = setInterval(() => {
+        if (window.BrowserPrint) {
+          console.log("Zebra SDK detected!");
+          clearInterval(interval);
+          resolve(true);
+        } else if (Date.now() - startTime > timeoutMs) {
+          console.error("Zebra SDK wait timeout. BrowserPrint is undefined.");
+          clearInterval(interval);
+          resolve(false);
+        }
+      }, 100);
     });
   }
 
@@ -43,23 +43,23 @@ class ZebraService {
     return new Promise((resolve, reject) => {
       try {
         window.BrowserPrint.getDefaultDevice(
-            "printer",
-            (device: ZebraDevice) => {
-                if (device && device.name) {
-                    console.log("Default Printer found:", device.name);
-                    resolve(device);
-                } else {
-                    reject(new Error("Принтер за замовчуванням не знайдено"));
-                }
-            },
-            (error: any) => {
-                console.error("SDK getDefaultDevice Error:", error);
-                reject(new Error("Zebra Browser Print не відповідає. Перевірте, чи запущена програма на ПК."));
+          "printer",
+          (device: ZebraDevice) => {
+            if (device && device.name) {
+              console.log("Default Printer found:", device.name);
+              resolve(device);
+            } else {
+              reject(new Error("Принтер за замовчуванням не знайдено"));
             }
+          },
+          (error: any) => {
+            console.error("SDK getDefaultDevice Error:", error);
+            reject(new Error("Zebra Browser Print не відповідає. Перевірте, чи запущена програма на ПК."));
+          }
         );
       } catch (e: any) {
-          console.error("SDK Exception:", e);
-          reject(new Error(e.message || "Unknown SDK Error"));
+        console.error("SDK Exception:", e);
+        reject(new Error(e.message || "Unknown SDK Error"));
       }
     });
   }
@@ -71,18 +71,18 @@ class ZebraService {
     return new Promise((resolve) => {
       try {
         window.BrowserPrint.getLocalDevices(
-            (deviceList: ZebraDevice[]) => {
-                resolve(deviceList || []);
-            },
-            (error: any) => {
-                console.warn(`SDK getLocalDevices Error [${type}]:`, error);
-                resolve([]); // Resolve empty array on error to allow other types to proceed
-            },
-            type
+          (deviceList: ZebraDevice[]) => {
+            resolve(deviceList || []);
+          },
+          (error: any) => {
+            console.warn(`SDK getLocalDevices Error [${type}]:`, error);
+            resolve([]); // Resolve empty array on error to allow other types to proceed
+          },
+          type
         );
       } catch (e) {
-          console.warn(`Exception calling getLocalDevices [${type}]:`, e);
-          resolve([]);
+        console.warn(`Exception calling getLocalDevices [${type}]:`, e);
+        resolve([]);
       }
     });
   }
@@ -102,15 +102,15 @@ class ZebraService {
     // Run scans in parallel for speed, or sequential if SDK demands it.
     // Sequential is safer for the Browser Print service.
     for (const type of types) {
-        const devices = await this.getDevicesByType(type);
-        for (const d of devices) {
-            if (!seenUids.has(d.uid)) {
-                seenUids.add(d.uid);
-                // Tag the connection type if missing (though device object usually has it)
-                if (!d.connection) d.connection = type;
-                allDevices.push(d);
-            }
+      const devices = await this.getDevicesByType(type);
+      for (const d of devices) {
+        if (!seenUids.has(d.uid)) {
+          seenUids.add(d.uid);
+          // Tag the connection type if missing (though device object usually has it)
+          if (!d.connection) d.connection = type;
+          allDevices.push(d);
         }
+      }
     }
 
     console.log("Total unique devices found:", allDevices.length);
@@ -129,42 +129,130 @@ class ZebraService {
         // Construct the device object manually if methods are missing (sometimes happens with serialized objects)
         let sdkDevice = device;
         if ((!device.send || typeof device.send !== 'function') && window.BrowserPrint) {
-            // @ts-ignore
-            sdkDevice = new window.BrowserPrint.Device(device);
+          // @ts-ignore
+          sdkDevice = new window.BrowserPrint.Device(device);
         }
 
         if (!sdkDevice.send) {
-            console.error("Device object missing send method");
-            resolve(false);
-            return;
+          console.error("Device object missing send method");
+          resolve(false);
+          return;
         }
 
         sdkDevice.send(
-            zpl,
-            (success: any) => {
-                console.log("Print sent successfully");
-                resolve(true);
-            },
-            (error: any) => {
-                console.error("Print failed:", error);
-                resolve(false);
-            }
+          zpl,
+          (success: any) => {
+            console.log("Print sent successfully");
+            resolve(true);
+          },
+          (error: any) => {
+            console.error("Print failed:", error);
+            resolve(false);
+          }
         );
       } catch (e) {
-          console.error("Print exception:", e);
-          resolve(false);
+        console.error("Print exception:", e);
+        resolve(false);
       }
     });
   }
 
-  generateZPL(template: string, data: { date: string; productName: string; sku: string; weight: string; serialNumber: string }): string {
+  /**
+   * Converts an image URL to a ZPL ^GFA command string.
+   */
+  async convertImageToZPL(imageUrl: string, options: { width: number, height: number, threshold?: number }): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Canvas 2D context not supported'));
+          return;
+        }
+
+        // Set dimensions (resizing the image)
+        canvas.width = options.width;
+        canvas.height = options.height;
+
+        // Draw image (scaling it)
+        ctx.drawImage(img, 0, 0, options.width, options.height);
+
+        // Get image data
+        const imageData = ctx.getImageData(0, 0, options.width, options.height);
+        const data = imageData.data;
+
+        // Convert to monochrome 1-bit
+        let binaryString = "";
+        const threshold = options.threshold || 128;
+
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          // Average for grayscale
+          const avg = (r + g + b) / 3;
+          // If dark enough -> 1 (print), else 0
+          binaryString += avg < threshold ? "1" : "0";
+        }
+
+        // Pack bits into Hex bytes
+        // Width in bytes (rounded up)
+        const widthBytes = Math.ceil(options.width / 8);
+        let hexBody = "";
+        let totalBytes = 0;
+
+        for (let h = 0; h < options.height; h++) {
+          // Processing row by row
+          for (let w = 0; w < widthBytes; w++) {
+            let byte = 0;
+            for (let bit = 0; bit < 8; bit++) {
+              const pixelIndex = (h * options.width) + (w * 8) + bit;
+              if (pixelIndex < (h + 1) * options.width) {
+                if (binaryString[pixelIndex] === '1') {
+                  byte |= (1 << (7 - bit));
+                }
+              }
+            }
+            hexBody += byte.toString(16).padStart(2, '0').toUpperCase();
+            totalBytes++;
+          }
+        }
+
+        // Construct ^GFA command
+        const command = `^GFA,${totalBytes},${totalBytes},${widthBytes},${hexBody}`;
+        resolve(command);
+      };
+      img.onerror = (err) => reject(err);
+      img.src = imageUrl;
+    });
+  }
+
+  generateZPL(template: string, data: { date: string; productName: string; sku: string; weight: string; serialNumber: string; sortLabel?: string; sortValue?: string; quantity?: number; logoZpl?: string }): string {
     let zpl = template;
+
+    // Construct Barcode Value: Date-SKU-Batch(Serial)-Weight
+    const barcodeValue = `${data.date}-${data.sku}-${data.serialNumber}-${data.weight}`;
+
     // Replace all occurrences
     zpl = zpl.split('{date}').join(data.date);
     zpl = zpl.split('{productName}').join(data.productName);
     zpl = zpl.split('{sku}').join(data.sku);
     zpl = zpl.split('{weight}').join(data.weight);
     zpl = zpl.split('{serialNumber}').join(data.serialNumber);
+    zpl = zpl.split('{barcode}').join(barcodeValue);
+
+    // Dynamic Sort/Fraction Label & Value
+    zpl = zpl.split('{sortLabel}').join(data.sortLabel || 'Sort');
+    zpl = zpl.split('{sortValue}').join(data.sortValue || '');
+
+    // Quantity
+    zpl = zpl.split('{quantity}').join(data.quantity ? data.quantity.toString() : '1');
+
+    // Logo (if provided, else remove placeholder)
+    zpl = zpl.split('{logo}').join(data.logoZpl || '');
+
     return zpl;
   }
 }

@@ -1,11 +1,22 @@
-import { Product, LabelSizeConfig } from './types';
+import { Product, LabelSizeConfig, User } from './types';
 
 export const PRODUCTS: Product[] = [
-  { id: '1', name: 'Довге волокно', sku: 'LF', category: 'fiber' },
-  { id: '2', name: 'Коротке волокно', sku: 'SF', category: 'fiber' },
-  { id: '3', name: 'Костра калібрована', sku: 'CS', category: 'shiv' },
-  { id: '4', name: 'Костра некалібрована', sku: 'NCS', category: 'shiv' },
-  { id: '5', name: 'Пил костри', sku: 'DS', category: 'dust' },
+  { id: '1', name: 'Довге волокно', sku: 'LF', category: 'fiber', sorts: ['1', '2', '3', '4'] },
+  { id: '2', name: 'Коротке волокно', sku: 'SF', category: 'fiber', sorts: ['1', '2', '3', '4'] },
+  { id: '3', name: 'Костра калібрована', sku: 'HC', category: 'shiv', sorts: ['+1.5 мм', '-1.5 мм+1.0 мм', '-1.0 мм'] },
+  { id: '4', name: 'Костра некалібрована', sku: 'HU', category: 'shiv', sorts: ['1', '2', '3'] },
+  { id: '5', name: 'Костра мілкодисперсна', sku: 'HF', category: 'dust' },
+  { id: '6', name: 'Висівки насіння', sku: 'SB', category: 'dust' },
+  { id: '7', name: 'Транспортуючий шпагат', sku: 'TT', category: 'fiber' }, // Using 'fiber' category for Twine as generic
+  { id: '8', name: 'Невпорядкована треста', sku: 'US', category: 'fiber' },
+];
+
+export const USERS: User[] = [
+  { id: '1', name: 'Обліковець', role: 'accountant', pin: '5555' },
+  { id: '2', name: 'Лабораторія', role: 'lab', pin: '2222' },
+  { id: '3', name: 'Агро', role: 'agro', pin: '3333' },
+  { id: '4', name: 'Адміністратор', role: 'admin', pin: '7777' },
+  { id: '5', name: 'Оператор', role: 'operator', pin: '1111' },
 ];
 
 export const INITIAL_SERIAL = 1;
@@ -26,6 +37,11 @@ const ZPL_100x100 = `
 ^FO30,150^A0N,30,30^FDProduct:^FS
 ^FO30,190^A0N,50,50^FD{productName}^FS
 
+^FO580,30{logo}^FS
+
+^FO500,150^A0N,30,30^FD{sortLabel}:^FS
+^FO500,190^A0N,40,40^FD{sortValue}^FS
+
 ^FO30,280^A0N,30,30^FDSKU:^FS
 ^FO130,280^A0N,30,30^FD{sku}^FS
 
@@ -35,11 +51,11 @@ const ZPL_100x100 = `
 ^FO30,500^A0N,30,30^FDSerial No:^FS
 ^FO30,540^A0N,40,40^FD#{serialNumber}^FS
 
-^FO150,600^BY3
-^BCN,150,Y,N,N
-^FD{sku}-{serialNumber}^FS
+^FO100,600^BY2
+^BCN,100,Y,N,N
+^FD{barcode}^FS
 
-^PQ2
+^PQ{quantity}
 ^XZ
 `;
 
@@ -52,16 +68,20 @@ const ZPL_58x30 = `
 
 ^FO10,10^A0N,25,25^FD{productName}^FS
 
-^FO10,45^A0N,45,45^FD{weight} kg^FS
+^FO360,10{logo}^FS
 
-^FO280,45^A0N,20,20^FD{date}^FS
-^FO280,70^A0N,20,20^FD#{serialNumber}^FS
+^FO100,50^A0N,30,30^FDDate: {date}^FS
 
-^FO60,110^BY2
-^BCN,60,Y,N,N
-^FD{sku}-{serialNumber}^FS
+^FO10,85^A0N,45,45^FD{weight} kg^FS
+^FO220,95^A0N,25,25^FD{sortLabel}:{sortValue}^FS
 
-^PQ2
+^FO280,130^A0N,20,20^FD#{serialNumber}^FS
+
+^FO40,155^BY1
+^BCN,40,Y,N,N
+^FD{barcode}^FS
+
+^PQ{quantity}
 ^XZ
 `;
 

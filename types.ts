@@ -1,10 +1,22 @@
+// Basic Product Types
 export type ProductCategory = 'fiber' | 'shiv' | 'dust';
+
+export type UserRole = 'accountant' | 'lab' | 'agro' | 'admin' | 'operator';
+
+export interface User {
+  id: string;
+  name: string;
+  role: UserRole;
+  pin: string;
+}
+
 
 export interface Product {
   id: string;
   name: string;
   sku: string;
   category: ProductCategory;
+  sorts?: string[];
 }
 
 export interface LabelData {
@@ -12,6 +24,9 @@ export interface LabelData {
   weight: string;
   serialNumber: number;
   date: string;
+  sortLabel?: string;
+  sortValue?: string;
+  // Deprecated: sort?: string;
 }
 
 // Global definition for the Zebra SDK object attached to window

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { LabelData } from '../types';
 import { DataManager } from '../services/dataManager'; // Added DataManager import
 import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 
 const LOCAL_STORAGE_HISTORY_KEY = 'zebra_print_history_v1';
 
@@ -61,29 +62,29 @@ export function useHistory() {
     };
 
     // Export Logic
-    const generateCSV = (): File => {
+    // Helper to get raw CSV string
+    const getCSVContent = (): string => {
         const BOM = "\uFEFF";
         const headers = ["Дата", "Час", "Продукт", "SKU", "Вага (кг)", "Серійний номер"];
 
         const csvRows = history.map(item => {
-            const dateObj = new Date(item.date); // item.date is stored as string in history? Check LabelData.
-            // LabelData.date is a string. But for sorting/time we usually used ISO.
-            // In App.tsx: date: today (locale string or ISO?). 
-            // App.tsx: const today = new Date().toLocaleDateString('uk-UA');
-            // If it is just date, time is lost.
+            const ts = (item as any).timestamp || new Date().toISOString(); // Fallback
+            let dateObj: Date;
+            try {
+                dateObj = new Date(ts);
+                if (isNaN(dateObj.getTime())) throw new Error("Invalid Date");
+            } catch {
+                dateObj = new Date();
+            }
 
-            // Wait, previous code used item.timestamp in useHistory (HistoryItem type).
-            // But App.tsx passes `timestamp: new Date().toISOString()` when calling addToHistory.
-            // So item has timestamp.
+            const timeStr = dateObj.toLocaleTimeString('uk-UA');
+            // Use date from item if it's a string, or format dateObj
+            const dateStr = typeof item.date === 'string' ? item.date : dateObj.toLocaleDateString('uk-UA');
 
-            const ts = (item as any).timestamp || new Date().toISOString();
-            const dateObjCorrect = new Date(ts);
-
-            const timeStr = dateObjCorrect.toLocaleTimeString('uk-UA');
-            const escape = (text: string) => `"${text.replace(/"/g, '""')}"`;
+            const escape = (text: string) => `"${(text || '').toString().replace(/"/g, '""')}"`;
 
             return [
-                escape(item.date),
+                escape(dateStr),
                 escape(timeStr),
                 escape(item.product?.name || ""),
                 escape(item.product?.sku || ""),
@@ -92,26 +93,52 @@ export function useHistory() {
             ].join(",");
         });
 
-        const csvString = BOM + headers.join(",") + "\n" + csvRows.join("\n");
-        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+        return BOM + headers.join(",") + "\n" + csvRows.join("\n");
+    };
 
+    // Legacy File object generator for Web Share API
+    const generateCSV = (): File => {
+        const csvString = getCSVContent();
+        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
         const filename = `ZebraLog_${new Date().toISOString().split('T')[0]}.csv`;
         return new File([blob], filename, { type: 'text/csv' });
     };
 
-    const exportCsv = () => {
+    const exportCsv = async () => {
         if (history.length === 0) {
             alert("Історія друку порожня");
             return;
         }
-        const file = generateCSV();
-        const url = URL.createObjectURL(file);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = file.name;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+
+        if (Capacitor.isNativePlatform()) {
+            // NATIVE: Write to Documents
+            try {
+                const csvContent = getCSVContent();
+                const fileName = `ZebraLog_${new Date().toISOString().split('T')[0]}.csv`;
+
+                await Filesystem.writeFile({
+                    path: fileName,
+                    data: csvContent,
+                    directory: Directory.Documents,
+                    encoding: Encoding.UTF8
+                });
+
+                alert(`✅ Звіт збережено у папку Documents:\n${fileName}`);
+            } catch (e) {
+                console.error(e);
+                alert('❌ Помилка збереження файлу: ' + e);
+            }
+        } else {
+            // WEB: Download Link
+            const file = generateCSV();
+            const url = URL.createObjectURL(file);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = file.name;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
     };
 
     const [reportEmail, setReportEmail] = useState<string>('');

@@ -3,7 +3,8 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Marijany Sticker Print</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -32,6 +33,36 @@
     body {
       overscroll-behavior-y: none;
     }
+
+    /* Safe Area Support for notches, system bars, etc. */
+    :root {
+      --safe-area-top: env(safe-area-inset-top, 0px);
+      --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-area-left: env(safe-area-inset-left, 0px);
+      --safe-area-right: env(safe-area-inset-right, 0px);
+    }
+
+    #root {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Ensure main content is scrollable */
+    .app-container {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      max-height: 100vh;
+      overflow: hidden;
+    }
+
+    .app-main {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+    }
   </style>
 
   <!-- ZEBRA SDK (INLINED & MODIFIED FOR DYNAMIC IP) -->
@@ -50,7 +81,7 @@
         function e(a, c) { var b = new XMLHttpRequest; "withCredentials" in b ? b.open(a, c, !0) : "undefined" != typeof XDomainRequest ? (b = new XDomainRequest, b.open(a, c)) : b = null; return b } function g(a, c, b, d) { void 0 !== a && (void 0 === b && (b = a.sendFinishedCallback), void 0 === d && (d = a.sendErrorCallback)); return h(c, b, d) } function k(a, c, b) { void 0 === c && (c = f.defaultSuccessCallback); void 0 === b && (b = f.defaultErrorCallback); return h(a, c, b) } function h(a, c, b) {
           a.onreadystatechange = function () {
             a.readyState === XMLHttpRequest.DONE &&
-            200 === a.status ? "" === a.responseType ? c(a.responseText) : c(a.response) : a.readyState === XMLHttpRequest.DONE && (b ? b(a.response) : console.log("error occurred with no errorCallback set."))
+              200 === a.status ? "" === a.responseType ? c(a.responseText) : c(a.response) : a.readyState === XMLHttpRequest.DONE && (b ? b(a.response) : console.log("error occurred with no errorCallback set."))
           }; return a
         } var f = {}, p = {};
 
@@ -91,7 +122,7 @@
             if ("string" === typeof b) f.loadFileFromUrl(b, function (b) { c.sendFile(b, a, l) }, l); else {
               var d = e("POST", m + "write"); if (d) {
                 d.responseType =
-                "text"; k(d, a, l); var n = new FormData, g = {}; g.device = c; n.append("json", JSON.stringify(g)); n.append("blob", b); d.send(n)
+                  "text"; k(d, a, l); var n = new FormData, g = {}; g.device = c; n.append("json", JSON.stringify(g)); n.append("blob", b); d.send(n)
               }
             }
           }; this.convertAndSendFile = function (b, a, l, c) { c || (c = {}); c.action || (c.action = "print"); f.convert(b, this, c, a, l) }; this.read = function (b, a) {
@@ -123,16 +154,16 @@
         }; f.stopReadOnInterval = function (a) { p[a] && clearTimeout(p[a]) }; f.bindFieldToReadData = function (a, c, b, d) { f.readOnInterval(a, function (a) { "" !== a && (c.value = a, void 0 !== d && null != d && d()) }, b) }; f.loadFileFromUrl = function (a, c, b) { request = e("get", a); console.log("ResponseType: " + request.responseType); request.responseType = "blob"; k(request, c, b); request.send() }; f.convert = function (a, c, b, d, l) {
           if (a) if ("string" === typeof a) f.loadFileFromUrl(a,
             function (e) { b.fromFormat || (b.fromFormat = a.substring(a.length - 3)); f.convert(e, c, b, d, l) }, l); else {
-              var g = e("POST", m + "convert"); a.type && (a.type.startsWith("image/") || a.type.startsWith("application/")) && (b.fromFormat = a.type.toLowerCase().replace("image/", "").replace("application/", "").replace("x-ms-", "")); if (g) {
-                g.responseType = "text"; var h = void 0; void 0 != d && (h = function (a) { d(JSON.parse(a)) }); k(g, h, l); h = new FormData; var t = {}; null != b && void 0 !== b && (t.options = b); c && (t.device = c); h.append("json", JSON.stringify(t));
-                h.append("blob", a); g.send(h)
-              }
+            var g = e("POST", m + "convert"); a.type && (a.type.startsWith("image/") || a.type.startsWith("application/")) && (b.fromFormat = a.type.toLowerCase().replace("image/", "").replace("application/", "").replace("x-ms-", "")); if (g) {
+              g.responseType = "text"; var h = void 0; void 0 != d && (h = function (a) { d(JSON.parse(a)) }); k(g, h, l); h = new FormData; var t = {}; null != b && void 0 !== b && (t.options = b); c && (t.device = c); h.append("json", JSON.stringify(t));
+              h.append("blob", a); g.send(h)
+            }
           } else l ? l("Resource not specified") : f.defaultErrorCallback("Resource not specified")
         }; f.scanImage = function (a, c, b, d) {
           if (a) if ("string" === typeof a) f.loadFileFromUrl(a, function (e) { c.format || (c.format = a.substring(a.length - 3)); f.scanImage(e, c, b, d) }, d); else {
             var g = e("POST", m + "convert/scan"); a.type && (a.type.startsWith("image/") || a.type.startsWith("application/")) && (c.format = a.type.toLowerCase().replace("image/", "").replace("application/", "").replace("x-ms-", "")); if (g) {
               g.responseType =
-              "text"; var h = void 0; void 0 != b && (h = function (a) { b(JSON.parse(a)) }); k(g, h, d); h = new FormData; var n = {}; n.options = c; h.append("json", JSON.stringify(n)); h.append("blob", a); g.send(h)
+                "text"; var h = void 0; void 0 != b && (h = function (a) { b(JSON.parse(a)) }); k(g, h, d); h = new FormData; var n = {}; n.options = c; h.append("json", JSON.stringify(n)); h.append("blob", a); g.send(h)
             }
           } else d ? d("Resource not specified") : f.defaultErrorCallback("Resource not specified")
         }; return f
@@ -213,7 +244,7 @@
               }).catch(g)
             }; this.storeConvertedResource = function (a, c, e, g) { if (!e && !g) return new Promise(function (b, e) { d.storeConvertedResource(a, c, b, e) }); b().then(function (b) { c.action = "store"; BrowserPrint.convert(a, d, c, e, g) }).catch(g) }; var b = function () { return new Promise(function (a, b) { if (d.configuration) a(d.configuration); else return d.getConfiguration().then(function (a) { d.configuration = a; return d.configuration }).catch(function (a) { b(a) }) }) }; this.configTimeout = function () {
               d.configuration ||
-              d.getConfiguration().then(function (a) { return d.configuration = a }).catch(function () { setTimeout(d.configTimeout, 1E3) })
+                d.getConfiguration().then(function (a) { return d.configuration = a }).catch(function () { setTimeout(d.configTimeout, 1E3) })
             }; this.configTimeout()
         }; g.watch = function (c, d, b) { b || (b = 2); l[c.uid] = { device: c, status: "", onchange: d, errors: 0, errorsForOffline: b } }; g.stopWatching = function (c) { delete l[c.uid] }; return g
       }();

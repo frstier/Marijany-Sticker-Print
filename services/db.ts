@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { USERS, PRODUCTS } from '../constants'; // Import initial data for seeding
 import { IDataService } from '../types/data';
 import { User, Product, LabelData } from '../types';
@@ -144,5 +145,47 @@ export const DatabaseService = {
             sortLabel: row.sort_label,
             sortValue: row.sort_value
         }));
+    },
+
+    // --- Backup & Restore ---
+
+    async backupDatabase(): Promise<string> {
+        if (!db) throw new Error("Database not initialized");
+
+        try {
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const fileName = `marijany_backup_${timestamp}.json`;
+
+            // 1. Fetch All Data
+            const users = await db.query('SELECT * FROM users');
+            const products = await db.query('SELECT * FROM products');
+            const history = await db.query('SELECT * FROM history');
+
+            const backupData = {
+                meta: {
+                    date: new Date().toISOString(),
+                    version: '1.0',
+                    appName: 'Marijany Sticker Print'
+                },
+                tables: {
+                    users: users.values || [],
+                    products: products.values || [],
+                    history: history.values || []
+                }
+            };
+
+            // 2. Write file to Documents
+            await Filesystem.writeFile({
+                path: fileName,
+                data: JSON.stringify(backupData, null, 2),
+                directory: Directory.Documents,
+                encoding: Encoding.UTF8
+            });
+
+            return fileName;
+        } catch (error) {
+            console.error('Backup failed:', error);
+            throw error;
+        }
     }
 };

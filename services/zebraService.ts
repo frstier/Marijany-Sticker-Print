@@ -268,13 +268,20 @@ class ZebraService {
     });
   }
 
-  generateZPL(template: string, data: { date: string; productName: string; sku: string; weight: string; serialNumber: string; sortLabel?: string; sortValue?: string; quantity?: number; logoZpl?: string }): string {
+  generateZPL(template: string, data: { date: string; productName: string; sku: string; weight: string; serialNumber: string; sortLabel?: string; sortValue?: string; quantity?: number; logoZpl?: string; barcodePattern?: string }): string {
     let zpl = template;
 
-    // Construct Barcode Value: Date-SKU-Batch(Serial)-Weight
-    const barcodeValue = `${data.date}-${data.sku}-${data.serialNumber}-${data.weight}`;
+    // Use custom pattern or default to Date-SKU-Batch-Weight
+    const pattern = data.barcodePattern || '{date}-{sku}-{serialNumber}-{weight}';
 
-    // Replace all occurrences
+    let barcodeValue = pattern;
+    barcodeValue = barcodeValue.split('{date}').join(data.date);
+    barcodeValue = barcodeValue.split('{sku}').join(data.sku);
+    barcodeValue = barcodeValue.split('{serialNumber}').join(data.serialNumber);
+    barcodeValue = barcodeValue.split('{weight}').join(data.weight);
+    barcodeValue = barcodeValue.split('{productName}').join(data.productName);
+
+    // Replace all occurrences in template
     zpl = zpl.split('{date}').join(data.date);
     zpl = zpl.split('{productName}').join(data.productName);
     zpl = zpl.split('{sku}').join(data.sku);

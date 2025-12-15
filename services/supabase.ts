@@ -2,21 +2,50 @@ import { IDataService } from '../types/data';
 import { User, Product, LabelData } from '../types';
 import { createClient } from '@supabase/supabase-js';
 
-// TODO: Move to env
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const STORAGE_URL_KEY = 'zebra_supabase_url';
+const STORAGE_KEY_KEY = 'zebra_supabase_key';
 
-// Mock client if config missing to prevent crash during build/dev
-const supabase = (SUPABASE_URL && SUPABASE_KEY)
-    ? createClient(SUPABASE_URL, SUPABASE_KEY)
-    : null;
+let supabase: ReturnType<typeof createClient> | null = null;
 
-export const SupabaseService: IDataService = {
+const getCredentials = () => {
+    const localUrl = localStorage.getItem(STORAGE_URL_KEY);
+    const localKey = localStorage.getItem(STORAGE_KEY_KEY);
+    const envUrl = import.meta.env.VITE_SUPABASE_URL;
+    const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    return {
+        url: localUrl || envUrl || '',
+        key: localKey || envKey || ''
+    };
+};
+
+// Initialize on load
+const { url, key } = getCredentials();
+if (url && key) {
+    supabase = createClient(url, key);
+}
+
+export const SupabaseService: IDataService & { updateCredentials: (u: string, k: string) => void } = {
     async init() {
+        const { url, key } = getCredentials();
+        if (url && key && !supabase) {
+            supabase = createClient(url, key);
+        }
+
         if (!supabase) {
             console.warn("Supabase credentials missing. Service inactive.");
+        } else {
+            console.log("Supabase Service Initialized");
         }
-        console.log("Supabase Service Initialized");
+    },
+
+    updateCredentials(newUrl: string, newKey: string) {
+        localStorage.setItem(STORAGE_URL_KEY, newUrl);
+        localStorage.setItem(STORAGE_KEY_KEY, newKey);
+        if (newUrl && newKey) {
+            supabase = createClient(newUrl, newKey);
+            window.location.reload(); // Simple reload to ensure fresh state
+        }
     },
 
     async getUsers(): Promise<User[]> {

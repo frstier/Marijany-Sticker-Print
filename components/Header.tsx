@@ -3,26 +3,30 @@ import { ExternalLinkIcon, RefreshIcon, SettingsIcon } from './Icons';
 import { PrinterStatus, User } from '../types';
 
 interface HeaderProps {
-    printerStatus: PrinterStatus;
-    onRefreshPrinter: () => void;
-    onOpenSettings: () => void;
     currentUser: User | null;
     onLogout: () => void;
+    // New Props from App.tsx
+    onSettingsClick: () => void;
+    printerData: any; // Contains printerStatus
+    // Legacy/Mapped Props
+    onRefreshPrinter?: () => void; // App passes this, but we can also get it from printerData
     queueCount?: number;
     onOpenQueue?: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
-    printerStatus,
-    onRefreshPrinter,
-    onOpenSettings,
     currentUser,
     onLogout,
+    onSettingsClick,
+    printerData,
+    onRefreshPrinter,
     queueCount = 0,
     onOpenQueue
 }) => {
+    // Extract status from data object
+    const printerStatus = printerData?.printerStatus || PrinterStatus.DISCONNECTED;
     return (
-        <header className="bg-[#115740] border-b border-[#0f4433] sticky top-0 z-30 shadow-md">
+        <header className="bg-[#115740] border-b border-[#0f4433] sticky top-0 z-30 shadow-md" style={{ paddingTop: 'var(--safe-area-top, 0px)' }}>
             <div className="max-w-7xl mx-auto px-3 h-14 md:h-16 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                     {/* Logo */}
@@ -32,10 +36,9 @@ const Header: React.FC<HeaderProps> = ({
                     <div>
                         <h1 className="text-lg md:text-xl font-bold text-white leading-none tracking-tight">Marijany Sticker Print</h1>
                         <div className="flex items-center gap-1">
-                            <p className="text-[10px] md:text-xs text-white/60">Лінія №1</p>
                             {/* New Window Warning Hint */}
                             {typeof window !== 'undefined' && window.self !== window.top && (
-                                <a href={window.location.href} target="_blank" rel="noopener noreferrer" className="text-[10px] text-white font-bold bg-white/20 px-1 rounded flex items-center gap-0.5 hover:bg-white/30 ml-2" title="Відкрити в новому вікні">
+                                <a href={window.location.href} target="_blank" rel="noopener noreferrer" className="text-[10px] text-white font-bold bg-white/20 px-1 rounded flex items-center gap-0.5 hover:bg-white/30" title="Відкрити в новому вікні">
                                     <ExternalLinkIcon /> New Window
                                 </a>
                             )}
@@ -89,7 +92,7 @@ const Header: React.FC<HeaderProps> = ({
 
                     {/* Settings Button */}
                     <button
-                        onClick={onOpenSettings}
+                        onClick={onSettingsClick}
                         className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all active:scale-95 border border-white/10"
                         title="Налаштування"
                     >

@@ -50,12 +50,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users = USERS }) => 
     return (
         <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
             <div className="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden">
-                <div className="bg-[#115740] p-6 text-center">
-                    <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg p-3">
+                <div className="bg-[#115740] p-4 md:p-6 text-center">
+                    <div className="w-16 h-16 md:w-20 md:h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-3 md:mb-4 shadow-lg p-3">
                         <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
                     </div>
-                    <h1 className="text-2xl font-bold text-white">Авторизація</h1>
-                    <p className="text-emerald-100 text-sm mt-1">Marijany Sticker Print</p>
+                    <h1 className="text-xl md:text-2xl font-bold text-white">Авторизація</h1>
+                    <p className="text-emerald-100 text-sm mt-1 mb-1">Marijany Sticker Print</p>
                 </div>
 
                 <div className="p-6">
@@ -108,14 +108,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users = USERS }) => 
                     </div>
 
                     {/* Simple Keypad */}
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-3 gap-2 md:gap-3">
                         {keys.map((key) => {
                             if (key === 'empty') return <div key={key} />;
                             if (key === 'back') return (
                                 <button
                                     key={key}
                                     onClick={handleBackspace}
-                                    className="h-14 flex items-center justify-center text-slate-500 hover:bg-slate-100 rounded-lg transition-colors font-bold"
+                                    className="h-12 md:h-14 flex items-center justify-center text-slate-500 hover:bg-slate-100 rounded-lg transition-colors font-bold"
                                 >
                                     ⌫
                                 </button>
@@ -124,7 +124,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users = USERS }) => 
                                 <button
                                     key={key}
                                     onClick={() => handleKeyPress(key)}
-                                    className="h-14 bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold text-xl rounded-lg border-b-2 border-slate-200 active:border-b-0 active:translate-y-[2px] transition-all"
+                                    className="h-12 md:h-14 bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold text-xl rounded-lg border-b-2 border-slate-200 active:border-b-0 active:translate-y-[2px] transition-all"
                                 >
                                     {key}
                                 </button>

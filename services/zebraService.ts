@@ -1,17 +1,23 @@
+import { Capacitor } from '@capacitor/core';
+import { CapacitorZebraPrinter } from 'capacitor-zebra-printer';
 import { ZebraDevice } from '../types';
 
 /**
- * Service Wrapper for the official Zebra Browser Print SDK.
- * Assumes SDK is loaded globally via index.html
+ * Service Wrapper for Zebra Printing.
+ * Supports:
+ * 1. Web (Desktop): Uses official Zebra Browser Print SDK.
+ * 2. Native (Android/iOS): Uses 'capacitor-zebra-printer' plugin.
  */
 class ZebraService {
 
+  private isNative = Capacitor.isNativePlatform();
+
   /**
-   * Waits for the SDK to be available on the window object.
-   * Retries for up to 3 seconds.
+   * Waits for the SDK to be available on the window object (Web only).
    */
   private async waitForSdk(timeoutMs = 3000): Promise<boolean> {
-    // Immediate check
+    if (this.isNative) return true; // Native doesn't need BrowserPrint SDK
+
     if (typeof window !== 'undefined' && window.BrowserPrint) {
       return true;
     }
@@ -34,9 +40,18 @@ class ZebraService {
   }
 
   /**
-   * Gets the default printer using the official SDK.
+   * Gets the default printer.
+   * Native: Returns the first discovered printer or null.
+   * Web: Returns the default configured printer from BrowserPrint.
    */
   async getDefaultPrinter(): Promise<ZebraDevice> {
+    if (this.isNative) {
+      // Since discovery is not supported, we cannot auto-detect default.
+      // Returning mocked 'Manual' printer if user set one, or error.
+      throw new Error("Автопошук не працює. Будь ласка, додайте принтер вручну в налаштуваннях.");
+    }
+
+    // WEB Logic
     const isLoaded = await this.waitForSdk();
     if (!isLoaded) throw new Error("Бібліотека Zebra SDK не ініціалізувалась. Оновіть сторінку.");
 
@@ -54,7 +69,7 @@ class ZebraService {
           },
           (error: any) => {
             console.error("SDK getDefaultDevice Error:", error);
-            reject(new Error("Zebra Browser Print не відповідає. Перевірте, чи запущена програма на ПК."));
+            reject(new Error("Zebra Browser Print не відповідає."));
           }
         );
       } catch (e: any) {
@@ -65,7 +80,7 @@ class ZebraService {
   }
 
   /**
-   * Internal helper to scan for a specific type
+   * Internal helper to scan for a specific type (Web Only)
    */
   private async getDevicesByType(type: string): Promise<ZebraDevice[]> {
     return new Promise((resolve) => {
@@ -76,7 +91,7 @@ class ZebraService {
           },
           (error: any) => {
             console.warn(`SDK getLocalDevices Error [${type}]:`, error);
-            resolve([]); // Resolve empty array on error to allow other types to proceed
+            resolve([]);
           },
           type
         );
@@ -88,9 +103,17 @@ class ZebraService {
   }
 
   /**
-   * Aggregates devices from all connection types (printer, usb, net, bt)
+   * Aggregates devices.
    */
   async getAllPrinters(): Promise<ZebraDevice[]> {
+    if (this.isNative) {
+      // Native Discovery - Plugin v0.2.0 does not support auto-discovery.
+      // We will rely on manual entry or future implementation.
+      console.warn("Native discovery not supported by current plugin.");
+      return [];
+    }
+
+    // WEB Logic
     const isLoaded = await this.waitForSdk();
     if (!isLoaded) throw new Error("Бібліотека Zebra SDK не завантажилася.");
 
@@ -99,21 +122,16 @@ class ZebraService {
     const seenUids = new Set<string>();
     const allDevices: ZebraDevice[] = [];
 
-    // Run scans in parallel for speed, or sequential if SDK demands it.
-    // Sequential is safer for the Browser Print service.
     for (const type of types) {
       const devices = await this.getDevicesByType(type);
       for (const d of devices) {
         if (!seenUids.has(d.uid)) {
           seenUids.add(d.uid);
-          // Tag the connection type if missing (though device object usually has it)
           if (!d.connection) d.connection = type;
           allDevices.push(d);
         }
       }
     }
-
-    console.log("Total unique devices found:", allDevices.length);
     return allDevices;
   }
 
@@ -121,12 +139,33 @@ class ZebraService {
    * Sends ZPL code to the printer.
    */
   async print(device: ZebraDevice, zpl: string): Promise<boolean> {
+    if (this.isNative) {
+      try {
+        console.log("Printing Native to:", device.uid);
+        // Plugin v0.2.0 print takes specific options. 
+        // We cast to any to avoid build errors if types are missing/incorrect.
+        const res = await CapacitorZebraPrinter.print({
+          value: zpl, // Some versions use 'value'
+          zpl: zpl,   // Others use 'zpl'
+          address: device.uid,
+          ip: device.uid, // Try passing UID as IP if it's network
+          port: 9100      // Default zebra port
+        } as any);
+
+        console.log("Native Print Result:", res);
+        return true;
+      } catch (e) {
+        console.error("Native Print Error:", e);
+        return false;
+      }
+    }
+
+    // WEB Logic
     const isLoaded = await this.waitForSdk();
     if (!isLoaded || !device) return false;
 
     return new Promise((resolve) => {
       try {
-        // Construct the device object manually if methods are missing (sometimes happens with serialized objects)
         let sdkDevice = device;
         if ((!device.send || typeof device.send !== 'function') && window.BrowserPrint) {
           // @ts-ignore

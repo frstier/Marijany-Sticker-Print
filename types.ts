@@ -38,12 +38,14 @@ declare global {
   }
 }
 
+declare module 'capacitor-zebra-printer';
+
 export interface ZebraDevice {
   uid: string;
   name: string;
   connection: string;
   deviceType: string;
-  version: number;
+  version: string | number;
   manufacturer: string;
   provider: string;
   // The official SDK device object has methods attached to it

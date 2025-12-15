@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:apk": "npm run build && npx cap sync && cd android && ./gradlew assembleDebug",
     "preview": "vite preview",
     "test": "vitest"
   },
@@ -16,6 +17,7 @@
     "@capacitor/core": "^8.0.0",
     "@google/genai": "^1.32.0",
     "@supabase/supabase-js": "^2.87.1",
+    "capacitor-zebra-printer": "^0.2.0",
     "jsbarcode": "3.11.6",
     "react": "^19.2.1",
     "react-dom": "^19.2.1"

@@ -114,6 +114,18 @@ export function useHistory() {
         document.body.removeChild(link);
     };
 
+    const [reportEmail, setReportEmail] = useState<string>('');
+
+    useEffect(() => {
+        const savedEmail = localStorage.getItem('zebra_report_email_v1');
+        if (savedEmail) setReportEmail(savedEmail);
+    }, []);
+
+    const saveReportEmail = (email: string) => {
+        setReportEmail(email);
+        localStorage.setItem('zebra_report_email_v1', email);
+    };
+
     const sendEmail = async () => {
         if (history.length === 0) {
             alert("Історія друку порожня");
@@ -139,16 +151,24 @@ export function useHistory() {
 
         exportCsv();
         setTimeout(() => {
-            const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body + "\n\n(Увага: Файл CSV був завантажений на ваш пристрій. Будь ласка, прикріпіть його до цього листа вручну.)")}`;
+            const recipient = reportEmail ? reportEmail : '';
+            const mailtoLink = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body + "\n\n(Увага: Файл CSV був завантажений на ваш пристрій. Будь ласка, прикріпіть його до цього листа вручну.)")}`;
             window.location.href = mailtoLink;
         }, 500);
     };
 
+    const checkDuplicate = (productId: string, serialNumber: number): boolean => {
+        return history.some(item => item.product?.id === productId && item.serialNumber === serialNumber);
+    };
+
     return {
         history,
+        checkDuplicate,
         addToHistory,
         clearHistory,
         exportCsv,
-        sendEmail
+        sendEmail,
+        reportEmail,
+        setReportEmail: saveReportEmail
     };
 }

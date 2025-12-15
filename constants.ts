@@ -1,5 +1,10 @@
 import { Product, LabelSizeConfig, User } from './types';
 
+// Exporting templates to be used in App.tsx logic if needed, 
+// though strictly we might want to keep them private and just swap them in App.
+// For now, I'll export them to make them accessible.
+export { ZPL_100x100_OFFSET };
+
 export const PRODUCTS: Product[] = [
   { id: '1', name: 'Довге волокно', sku: 'LF', category: 'fiber', sorts: ['1', '2', '3', '4'] },
   { id: '2', name: 'Коротке волокно', sku: 'SF', category: 'fiber', sorts: ['1', '2', '3', '4'] },
@@ -53,6 +58,43 @@ const ZPL_100x100 = `
 
 ^FO100,600^BY2
 ^BCN,100,Y,N,N
+^FD{barcode}^FS
+
+^PQ{quantity}
+^XZ
+`;
+
+// 100x100mm OFFSET (For Wire Attachment - Shifted Down ~15mm / 120 dots)
+// We also compress vertical limits to fit within 800 dots height.
+const ZPL_100x100_OFFSET = `
+^XA
+^PW800
+^LL800
+^CI28
+^FO10,10^GB780,780,4^FS
+
+^FO30,150^A0N,30,30^FDDate:^FS
+^FO30,190^A0N,40,40^FD{date}^FS
+
+^FO30,240^A0N,30,30^FDProduct:^FS
+^FO30,280^A0N,50,50^FD{productName}^FS
+
+^FO580,150{logo}^FS
+
+^FO500,240^A0N,30,30^FD{sortLabel}:^FS
+^FO500,280^A0N,40,40^FD{sortValue}^FS
+
+^FO30,360^A0N,30,30^FDSKU:^FS
+^FO130,360^A0N,30,30^FD{sku}^FS
+
+^FO30,440^A0N,40,40^FDWeight:^FS
+^FO200,420^A0N,100,100^FD{weight} kg^FS
+
+^FO30,570^A0N,30,30^FDSerial No:^FS
+^FO30,610^A0N,40,40^FD#{serialNumber}^FS
+
+^FO100,670^BY2
+^BCN,90,Y,N,N
 ^FD{barcode}^FS
 
 ^PQ{quantity}

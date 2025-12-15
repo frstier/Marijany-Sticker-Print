@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { USERS } from '../constants';
-import { LockClosedIcon } from './Icons';
 
 interface LoginScreenProps {
     onLogin: (user: User) => void;
@@ -52,8 +51,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users = USERS }) => 
         <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
             <div className="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden">
                 <div className="bg-[#115740] p-6 text-center">
-                    <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <LockClosedIcon />
+                    <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg p-3">
+                        <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
                     </div>
                     <h1 className="text-2xl font-bold text-white">Авторизація</h1>
                     <p className="text-emerald-100 text-sm mt-1">Marijany Sticker Print</p>
@@ -65,23 +64,28 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users = USERS }) => 
                         <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
                             Оберіть користувача
                         </label>
-                        <div className="grid grid-cols-2 gap-2">
-                            {USERS.map(user => (
-                                <button
-                                    key={user.id}
-                                    onClick={() => {
+                        <div className="relative">
+                            <select
+                                value={selectedUser.id}
+                                onChange={(e) => {
+                                    const user = users.find(u => u.id === e.target.value);
+                                    if (user) {
                                         setSelectedUser(user);
                                         setPin('');
                                         setError('');
-                                    }}
-                                    className={`p-3 rounded-lg text-sm font-bold transition-all border-2 ${selectedUser.id === user.id
-                                        ? 'border-[#115740] bg-green-50 text-[#115740]'
-                                        : 'border-slate-100 bg-slate-50 text-slate-600 hover:border-slate-200'
-                                        }`}
-                                >
-                                    {user.name}
-                                </button>
-                            ))}
+                                    }
+                                }}
+                                className="w-full appearance-none bg-slate-50 border border-slate-200 text-slate-700 py-3 px-4 pr-8 rounded-lg leading-tight focus:outline-none focus:bg-white focus:border-[#115740] font-bold"
+                            >
+                                {users.map(user => (
+                                    <option key={user.id} value={user.id}>
+                                        {user.name}
+                                    </option>
+                                ))}
+                            </select>
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-700">
+                                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
+                            </div>
                         </div>
                     </div>
 

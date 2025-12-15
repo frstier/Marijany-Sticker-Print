@@ -34,6 +34,12 @@ interface SettingsModalProps {
     onExportHistory: () => void;
     onSendEmail: () => void;
     onClearHistory: () => void;
+    // Database Props (Admin)
+    dataSource: 'sqlite' | 'supabase';
+    onChangeDataSource: (source: 'sqlite' | 'supabase') => void;
+    // Email Props
+    reportEmail: string;
+    onReportEmailChange: (val: string) => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -54,7 +60,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     historyCount,
     onExportHistory,
     onSendEmail,
-    onClearHistory
+    onClearHistory,
+    dataSource,
+    onChangeDataSource,
+    reportEmail,
+    onReportEmailChange
 }) => {
     if (!isOpen) return null;
 
@@ -164,6 +174,39 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         </section>
                     )}
 
+                    {/* Section: Database Configuration (ADMIN ONLY) */}
+                    {isAdminMode && (
+                        <section className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                            <h4 className="font-semibold text-blue-800 mb-3 text-sm uppercase tracking-wider flex items-center gap-2">
+                                <SettingsIcon />
+                                База Даних
+                            </h4>
+                            <div className="flex bg-white rounded-lg p-1 border border-blue-200">
+                                <button
+                                    onClick={() => onChangeDataSource('sqlite')}
+                                    className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${dataSource === 'sqlite'
+                                        ? 'bg-blue-100 text-blue-800 shadow-sm'
+                                        : 'text-slate-500 hover:bg-slate-50'
+                                        }`}
+                                >
+                                    Local (SQLite)
+                                </button>
+                                <button
+                                    onClick={() => onChangeDataSource('supabase')}
+                                    className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${dataSource === 'supabase'
+                                        ? 'bg-blue-100 text-blue-800 shadow-sm'
+                                        : 'text-slate-500 hover:bg-slate-50'
+                                        }`}
+                                >
+                                    Cloud (Supabase)
+                                </button>
+                            </div>
+                            <p className="text-[10px] text-blue-600 mt-2 text-center">
+                                Увага: Зміна джерела перезавантажить сторінку.
+                            </p>
+                        </section>
+                    )}
+
                     {/* Section: Label Size */}
                     <section>
                         <h4 className="font-semibold text-slate-700 mb-3 text-sm uppercase tracking-wider">Розмір етикетки</h4>
@@ -201,6 +244,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 {historyCount} rec
                             </span>
                         </h4>
+
+                        {/* Email Config */}
+                        <div className="mb-4">
+                            <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Email для звітів</label>
+                            <div className="flex gap-2">
+                                <span className="p-2 bg-slate-100 rounded-lg text-slate-400 border border-slate-200">
+                                    <MailIcon />
+                                </span>
+                                <input
+                                    type="email"
+                                    value={reportEmail}
+                                    onChange={(e) => onReportEmailChange(e.target.value)}
+                                    placeholder="boss@factory.com"
+                                    className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                                />
+                            </div>
+                        </div>
 
                         <div className="grid grid-cols-2 gap-3">
                             <button
@@ -249,7 +309,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </button>
                 </div>
             </div>
-        </div>
+        </div >
     );
 };
 

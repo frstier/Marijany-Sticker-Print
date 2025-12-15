@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { DatabaseService } from '../services/db';
+import { DataManager } from '../services/dataManager';
 import { PRODUCTS, USERS } from '../constants';
 import { Product, User } from '../types';
 
@@ -13,14 +13,15 @@ export function useData() {
         const loadData = async () => {
             if (Capacitor.getPlatform() !== 'web') {
                 try {
-                    await DatabaseService.init();
+                    const dataService = DataManager.getService();
+                    await dataService.init();
 
-                    const dbProducts = await DatabaseService.getProducts();
+                    const dbProducts = await dataService.getProducts();
                     if (dbProducts.length > 0) {
                         setProducts(dbProducts as Product[]);
                     }
 
-                    const dbUsers = await DatabaseService.getUsers();
+                    const dbUsers = await dataService.getUsers();
                     if (dbUsers.length > 0) {
                         setUsers(dbUsers as User[]);
                     }

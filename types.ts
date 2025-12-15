@@ -26,6 +26,7 @@ export interface LabelData {
   date: string;
   sortLabel?: string;
   sortValue?: string;
+  timestamp?: string;
   // Deprecated: sort?: string;
 }
 

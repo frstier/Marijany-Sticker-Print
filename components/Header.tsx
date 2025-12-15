@@ -8,6 +8,8 @@ interface HeaderProps {
     onOpenSettings: () => void;
     currentUser: User | null;
     onLogout: () => void;
+    queueCount?: number;
+    onOpenQueue?: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -15,7 +17,9 @@ const Header: React.FC<HeaderProps> = ({
     onRefreshPrinter,
     onOpenSettings,
     currentUser,
-    onLogout
+    onLogout,
+    queueCount = 0,
+    onOpenQueue
 }) => {
     return (
         <header className="bg-[#115740] border-b border-[#0f4433] sticky top-0 z-30 shadow-md">
@@ -64,6 +68,24 @@ const Header: React.FC<HeaderProps> = ({
                     >
                         <RefreshIcon />
                     </button>
+
+                    {/* Queue Button (Restricted) */}
+                    {onOpenQueue && (
+                        <button
+                            onClick={onOpenQueue}
+                            className={`p-2 relative rounded-lg transition-all active:scale-95 border border-white/10 ${queueCount > 0 ? 'bg-orange-600 text-white hover:bg-orange-700' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                            title="Відкладений друк"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                            {queueCount > 0 && (
+                                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border-2 border-[#115740]">
+                                    {queueCount}
+                                </span>
+                            )}
+                        </button>
+                    )}
 
                     {/* Settings Button */}
                     <button

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Product, LabelData, LabelSizeConfig } from './types';
-import { PRODUCTS, LABEL_SIZES, INITIAL_SERIAL } from './constants';
+import { PRODUCTS, LABEL_SIZES, INITIAL_SERIAL, ZPL_100x100_OFFSET } from './constants';
 import { zebraService } from './services/zebraService';
+import { DataManager } from './services/dataManager';
 
 // Components
 import Keypad from './components/Keypad';
@@ -18,6 +19,9 @@ import { usePrinter } from './hooks/usePrinter';
 import { useHistory } from './hooks/useHistory';
 import { useAuth } from './hooks/useAuth';
 import { useData } from './hooks/useData';
+import { useDeferredPrint } from './hooks/useDeferredPrint';
+import DeferredPrintModal from './components/DeferredPrintModal';
+import { QueueListIcon } from './components/Icons';
 
 const LOCAL_STORAGE_COUNTERS_KEY = 'zebra_product_counters_v1';
 
@@ -41,7 +45,10 @@ export default function App() {
     // Hooks
     const printerData = usePrinter();
     const historyData = useHistory();
+    const deferredData = useDeferredPrint();
     const { products: availableProducts, isLoading: isDataLoading } = useData();
+
+    const [isQueueOpen, setIsQueueOpen] = useState(false);
 
     // Refs
     const lastClickTimeRef = useRef<number>(0);
@@ -229,16 +236,36 @@ export default function App() {
             console.warn("Printer not connected. Mocking print.");
         }
 
+        // Use selected product/weight for current print, OR provided args if I refactor later.
+        // For now, let's keep executePrint for the MAIN UI print button.
+        // And create a separate `handlePrintLabelData` for the queue.
+
+        await handlePrintLabelData({
+            ...labelData,
+            // Ensure we use the current selection for sorting logic if printing from main UI
+            // But labelData already has it.
+        }, copies);
+    };
+
+    // Generic Print Handler (Refactored)
+    const handlePrintLabelData = async (data: LabelData, copies: number): Promise<boolean> => {
         const logoToUse = selectedLabelSize.id === '100x100' ? logoZplLarge : logoZplSmall;
 
-        const zpl = zebraService.generateZPL(selectedLabelSize.template, {
-            date: today,
-            productName: selectedProduct.name,
-            sku: selectedProduct.sku,
-            weight: weight,
-            serialNumber: currentSerialNumber.toString(),
-            sortLabel: previewSortLabel,
-            sortValue: previewSortValue, // Use the calculated logic
+        // Custom Template Logic:
+        // If Product is 'Short Fiber' (id: 2) AND Size is 100x100 -> Use Offset Template
+        let zplTemplate = selectedLabelSize.template;
+        if (data.product?.id === '2' && selectedLabelSize.id === '100x100') {
+            zplTemplate = ZPL_100x100_OFFSET;
+        }
+
+        const zpl = zebraService.generateZPL(zplTemplate, {
+            date: data.date,
+            productName: data.product?.name || 'Unknown',
+            sku: data.product?.sku || '',
+            weight: data.weight,
+            serialNumber: data.serialNumber.toString(),
+            sortLabel: data.sortLabel || '',
+            sortValue: data.sortValue || '',
             quantity: copies,
             logoZpl: logoToUse
         });
@@ -248,24 +275,52 @@ export default function App() {
             success = await zebraService.print(printerData.printer, zpl);
         } else {
             console.log(`--- MOCK PRINTING ZPL (${selectedLabelSize.name}) - Copies: ${copies} ---`);
-            console.log(zpl);
+            // console.log(zpl);
             success = true;
         }
 
         if (success) {
             // Add to history
-            historyData.addToHistory({ ...labelData, timestamp: new Date().toISOString() });
+            const timestamp = new Date().toISOString();
+            historyData.addToHistory({ ...data, timestamp });
 
-            // Increment Counter
+            // Only increment counter if we are printing the CURRENT selection (naive check)
+            // If printing from Queue, we probably shouldn't increment the *current* counter on screen
+            // unless the queue item IS the current item?
+            // Actually, queues usually have their own serial.
+            // Queue item MUST have its serial frozen.
+
+            // Logic: executePrint (Main UI) calls this. 
+            // So executePrint is responsible for incrementing counter.
+            return true;
+        } else {
+            // alert("Помилка друку.");
+            return false;
+        }
+        return success;
+    };
+
+    // Wrapper for Main UI Print
+    const executeMainPrint = async (copies: number) => {
+        // Duplicate Check
+        if (historyData.checkDuplicate(selectedProduct!.id, currentSerialNumber)) {
+            if (!window.confirm(`Етикетка для "${selectedProduct!.name}" з номером #${currentSerialNumber} вже існує в історії.\n\nБажаєте перезаписати (створити дублікат)?`)) {
+                return; // Cancel
+            }
+        }
+
+        const success = await handlePrintLabelData(labelData, copies);
+        if (success) {
             setProductCounters(prev => ({
                 ...prev,
-                [selectedProduct.id]: (prev[selectedProduct.id] ?? INITIAL_SERIAL) + 1
+                [selectedProduct!.id]: (prev[selectedProduct!.id] ?? INITIAL_SERIAL) + 1
             }));
             setWeight('');
         } else {
             alert("Помилка друку.");
         }
     };
+
 
     const handlePrintClick = () => {
         if (!selectedProduct || !weight) {
@@ -279,7 +334,7 @@ export default function App() {
                 const count = printClickCountRef.current;
                 const copies = count >= 2 ? 2 : 1;
                 console.log(`Print Timer Executed. Clicks: ${count}, Copies: ${copies}`);
-                executePrint(copies);
+                executeMainPrint(copies);
                 printClickCountRef.current = 0;
                 printTimerRef.current = null;
             }, 1000);
@@ -313,6 +368,23 @@ export default function App() {
                 onExportHistory={historyData.exportCsv}
                 onSendEmail={historyData.sendEmail}
                 onClearHistory={historyData.clearHistory}
+                // Database
+                dataSource={DataManager.getDataSource()}
+                onChangeDataSource={DataManager.setDataSource}
+                // Email
+                reportEmail={historyData.reportEmail}
+                onReportEmailChange={historyData.setReportEmail}
+            />
+
+            <DeferredPrintModal
+                isOpen={isQueueOpen}
+                onClose={() => setIsQueueOpen(false)}
+                queue={deferredData.queue}
+                onRemove={deferredData.removeFromQueue}
+                onClear={deferredData.clearQueue}
+                onClearForce={deferredData.clearQueueForce}
+                onPrintItem={handlePrintLabelData}
+                printerName={printerData.printer?.name}
             />
 
             <Header
@@ -321,6 +393,8 @@ export default function App() {
                 onOpenSettings={() => setIsSettingsOpen(true)}
                 currentUser={currentUser}
                 onLogout={logout}
+                queueCount={deferredData.queue.length}
+                onOpenQueue={['admin', 'accountant', 'lab'].includes(currentUser?.role || '') ? () => setIsQueueOpen(true) : undefined}
             />
 
             <main className="flex-1 p-3 md:p-6 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -450,8 +524,40 @@ export default function App() {
                             }`}
                     >
                         <PrinterIcon />
-                        {selectedProduct && weight ? 'ДРУКУВАТИ ЕТИКЕТКУ' : 'ЗАПОВНІТЬ ДАНІ'}
+                        {selectedProduct && weight ? 'ДРУКУВАТИ' : 'ЗАПОВНІТЬ ДАНІ'}
                     </button>
+
+                    {/* Deferred Print Button */}
+                    {!isPrintDisabled && ['admin', 'accountant', 'lab'].includes(currentUser?.role || '') && (
+                        <button
+                            onClick={() => {
+                                // Duplicate Check
+                                if (historyData.checkDuplicate(selectedProduct!.id, currentSerialNumber)) {
+                                    if (!window.confirm(`Етикетка для "${selectedProduct!.name}" з номером #${currentSerialNumber} вже існує в історії.\n\nБажаєте додати в чергу (створити дублікат)?`)) {
+                                        return; // Cancel
+                                    }
+                                }
+
+                                deferredData.addToQueue(labelData);
+                                setWeight('');
+                                // Increment serial? 
+                                // "Print Later" usually implies we are "booking" this sticker.
+                                // If I print later, I probably expect the serial to be consumed now?
+                                // Let's consume it.
+                                setProductCounters(prev => ({
+                                    ...prev,
+                                    [selectedProduct!.id]: (prev[selectedProduct!.id] ?? INITIAL_SERIAL) + 1
+                                }));
+                                alert("Додано в чергу друку!");
+                            }}
+                            className="w-full py-4 px-6 rounded-xl font-bold text-lg border-2 border-[#115740] text-[#115740] hover:bg-green-50 transition-colors flex items-center justify-center gap-2"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Відкласти друк
+                        </button>
+                    )}
 
                     <p className="text-center text-slate-400 text-sm font-medium">
                         Підказка: Натисніть двічі для друку 2 копій

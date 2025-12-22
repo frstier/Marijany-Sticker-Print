@@ -67,29 +67,11 @@
 
   <!-- ZEBRA SDK (PATCHED v3.1.250) -->
   <script src="./BrowserPrint.js"></script>
-  <script type="module" crossorigin src="/Marijany-Sticker-Print/assets/index-mqFMUqhH.js"></script>
+  <script type="module" crossorigin src="/Marijany-Sticker-Print/assets/index-OiDg-ry5.js"></script>
 </head>
 
 <body>
-  <div id="error-display"
-    style="display:none; padding:20px; color:red; font-family:sans-serif; background:white; position:fixed; top:0; left:0; right:0; bottom:0; z-index:9999;">
-    <h1>Application Error</h1>
-    <pre id="error-message"></pre>
-  </div>
-  <script>
-    window.addEventListener('error', function (event) {
-      var display = document.getElementById('error-display');
-      var msg = document.getElementById('error-message');
-      display.style.display = 'block';
-      msg.textContent = event.message + '\n' + (event.error ? event.error.stack : '');
-    });
-    window.addEventListener('unhandledrejection', function (event) {
-      var display = document.getElementById('error-display');
-      var msg = document.getElementById('error-message');
-      display.style.display = 'block';
-      msg.textContent = 'Unhandled Promise Rejection: ' + event.reason;
-    });
-  </script>
+
   <div id="root"></div>
 </body>
 

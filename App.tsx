@@ -77,9 +77,10 @@ export default function App() {
     useEffect(() => {
         const prepareLogos = async () => {
             try {
-                const small = await zebraService.convertImageToZPL('/logo_bw.png', { width: 80, height: 50 });
+                const logoPath = import.meta.env.BASE_URL + 'logo_bw.png';
+                const small = await zebraService.convertImageToZPL(logoPath, { width: 80, height: 50 });
                 setLogoZplSmall(small);
-                const large = await zebraService.convertImageToZPL('/logo_bw.png', { width: 200, height: 120 });
+                const large = await zebraService.convertImageToZPL(logoPath, { width: 200, height: 120 });
                 setLogoZplLarge(large);
                 console.log("Logos converted to ZPL successfully");
             } catch (e) {
@@ -427,7 +428,7 @@ export default function App() {
                                             <div className="flex justify-between items-center mb-2 md:mb-3">
                                                 <label className="text-xs md:text-sm font-bold text-slate-600 uppercase tracking-wide">Серіал</label>
                                                 <span className="text-[10px] md:text-xs font-medium text-slate-400 truncate max-w-[80px]">
-                                                    {currentUser?.role === 'operator' ? '2x клік' : 'Клік'}
+                                                    {currentUser?.role === 'operator' ? 'Тільки перегляд' : 'Ред.'}
                                                 </span>
                                             </div>
 
@@ -441,15 +442,22 @@ export default function App() {
                                                 </button>
                                                 <input
                                                     type="number"
+                                                    inputMode="numeric" // Force numeric keypad on Android/iOS
+                                                    pattern="[0-9]*"    // Fallback
                                                     value={currentSerialNumber}
-                                                    onClick={handleEditIconClick}
+                                                    readOnly={currentUser?.role === 'operator'} // Operators cannot edit manually, only +/- or not at all?
+                                                    // Allow manual edit for others
                                                     onChange={(e) => {
                                                         const val = parseInt(e.target.value);
                                                         if (!isNaN(val) && val >= 1) {
                                                             setProductCounters(prev => ({ ...prev, [selectedProduct.id]: val }));
+                                                        } else if (e.target.value === '') {
+                                                            // Allow temporary empty state while typing if needed, 
+                                                            // but usually easier to keep it controlled. 
+                                                            // For now simple number update.
                                                         }
                                                     }}
-                                                    className="flex-1 w-full min-w-[60px] bg-white border-2 border-slate-200 rounded-lg text-center text-lg md:text-xl font-mono font-bold text-slate-800 focus:border-[#115740] focus:outline-none transition-colors h-10 md:h-12"
+                                                    className={`flex-1 w-full min-w-[60px] bg-white border-2 border-slate-200 rounded-lg text-center text-lg md:text-xl font-mono font-bold text-slate-800 focus:border-[#115740] focus:outline-none transition-colors h-10 md:h-12 ${currentUser?.role === 'operator' ? 'bg-slate-50 text-slate-500' : ''}`}
                                                 />
                                                 <button
                                                     onClick={() => {
@@ -581,17 +589,37 @@ export default function App() {
                 </div>
             </main>
             {/* Sticky Mobile Footer Print Button */}
-            <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 md:hidden z-40 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+            <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 md:hidden z-40 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex gap-3">
+                {/* Deferred Print Mobile Button */}
+                {!isPrintDisabled && ['admin', 'accountant', 'lab'].includes(currentUser?.role || '') && (
+                    <button
+                        onClick={() => {
+                            if (historyData.checkDuplicate(selectedProduct!.id, currentSerialNumber)) {
+                                if (!window.confirm(`Етикетка для "${selectedProduct!.name}" з номером #${currentSerialNumber} вже існує в історії.\n\nБажаєте додати в чергу (створити дублікат)?`)) return;
+                            }
+                            deferredData.addToQueue(labelData);
+                            setWeight('');
+                            setProductCounters(prev => ({ ...prev, [selectedProduct!.id]: (prev[selectedProduct!.id] ?? INITIAL_SERIAL) + 1 }));
+                            alert("Додано в чергу!");
+                        }}
+                        className="flex-1 py-3 rounded-xl font-bold text-lg border-2 border-[#115740] text-[#115740] hover:bg-green-50 active:bg-green-100 transition-colors flex items-center justify-center"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </button>
+                )}
+
                 <button
                     onClick={handlePrintClick}
                     disabled={isPrintDisabled}
-                    className={`w-full py-3 rounded-xl font-bold text-xl shadow-lg transition-all transform active:scale-[0.98] flex items-center justify-center gap-2 ${isPrintDisabled
+                    className={`flex-[3] py-3 rounded-xl font-bold text-xl shadow-lg transition-all transform active:scale-[0.98] flex items-center justify-center gap-2 ${isPrintDisabled
                         ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
                         : 'bg-[#115740] text-white shadow-green-900/20'
                         }`}
                 >
                     <PrinterIcon />
-                    {selectedProduct && weight ? 'ДРУКУВАТИ' : 'ЗАПОВНІТЬ ДАНІ'}
+                    {selectedProduct && weight ? 'ДРУК' : 'ЗАПОВНІТЬ'}
                 </button>
             </div>
         </div>

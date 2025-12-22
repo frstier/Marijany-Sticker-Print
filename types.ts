@@ -35,7 +35,49 @@ declare global {
   interface Window {
     BrowserPrint: any;
     Zebra: any; // Added Zebra global namespace
+    bluetoothSerial?: any; // Cordova plugin global
   }
+}
+
+// Minimal Web Bluetooth Types
+interface BluetoothRemoteGATTCharacteristic {
+  properties: {
+    write: boolean;
+    writeWithoutResponse: boolean;
+    notify: boolean;
+    read: boolean;
+  };
+  writeValue: (value: BufferSource) => Promise<void>;
+  readValue: () => Promise<DataView>;
+}
+
+interface BluetoothRemoteGATTService {
+  getCharacteristics: () => Promise<BluetoothRemoteGATTCharacteristic[]>;
+}
+
+interface BluetoothRemoteGATTServer {
+  connected: boolean;
+  device: {
+    id: string;
+    name?: string;
+    gatt?: BluetoothRemoteGATTServer;
+  };
+  connect: () => Promise<BluetoothRemoteGATTServer>;
+  getPrimaryServices: () => Promise<BluetoothRemoteGATTService[]>;
+}
+
+interface Navigator {
+  bluetooth: {
+    requestDevice(options: {
+      filters?: Array<{ namePrefix?: string, name?: string, services?: Array<string | number> }>;
+      optionalServices?: Array<string | number>;
+      acceptAllDevices?: boolean;
+    }): Promise<{
+      id: string;
+      name?: string;
+      gatt?: BluetoothRemoteGATTServer;
+    }>;
+  };
 }
 
 declare module 'capacitor-zebra-printer';
@@ -51,6 +93,8 @@ export interface ZebraDevice {
   // The official SDK device object has methods attached to it
   send?: (data: string, success?: any, error?: any) => void;
   read?: (success?: any, error?: any) => void;
+  // For Web Bluetooth
+  gattServer?: BluetoothRemoteGATTServer;
 }
 
 export enum PrinterStatus {

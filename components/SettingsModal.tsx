@@ -13,6 +13,7 @@ import { ZebraDevice, LabelSizeConfig, LabelData } from '../types';
 import { LABEL_SIZES } from '../constants';
 import { DatabaseService } from '../services/db';
 import { SupabaseService } from '../services/supabase';
+import { Capacitor } from '@capacitor/core';
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -94,10 +95,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </button>
                 </div>
 
-                <div className="p-6 space-y-8">
+                <div className="p-4 space-y-6">
                     {/* Section: Printer Connection (ADMIN ONLY) */}
                     {isAdmin && (
-                        <section className="animate-fade-in bg-amber-50 p-4 rounded-xl border border-amber-200">
+                        <section className="animate-fade-in bg-amber-50 p-3 rounded-xl border border-amber-200">
                             <h4 className="font-semibold text-amber-800 mb-3 text-sm uppercase tracking-wider flex items-center gap-2">
                                 <LockClosedIcon /> Адміністрування принтера
                             </h4>
@@ -116,19 +117,29 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                             <div className="space-y-3">
                                 <div className="flex flex-col gap-1">
                                     <label className="text-xs font-bold text-amber-800 uppercase">IP Агента Zebra:</label>
-                                    <div className="flex gap-2">
-                                        <input type="text" value={agentIp} onChange={(e) => setAgentIp(e.target.value)} className="border border-amber-300 rounded px-2 py-1 text-sm flex-1" placeholder="127.0.0.1" />
-                                        <button onClick={saveAgentIp} className="text-xs bg-amber-200 px-2 rounded hover:bg-amber-300">Зберегти</button>
+                                    <div className="flex flex-col sm:flex-row gap-2">
+                                        <input type="text" value={agentIp} onChange={(e) => setAgentIp(e.target.value)} className="border border-amber-300 rounded px-2 py-2 text-sm flex-1" placeholder="127.0.0.1" />
+                                        <button onClick={saveAgentIp} className="text-xs bg-amber-200 px-3 py-2 rounded hover:bg-amber-300 font-bold text-amber-800">Зберегти</button>
                                     </div>
                                 </div>
                                 <button onClick={fixSsl} className="w-full bg-white text-amber-700 border border-amber-300 p-2 rounded-lg hover:bg-amber-50 flex items-center justify-center gap-2 text-sm font-semibold">
                                     <ShieldCheckIcon /> Виправити SSL ({agentIp})
                                 </button>
                                 <div className="flex gap-2 border-t border-amber-200 pt-3">
-                                    <button onClick={searchPrinters} disabled={isSearchingPrinters} className="w-full bg-amber-600 text-white p-3 rounded-lg hover:bg-amber-700 disabled:opacity-50 flex items-center justify-center gap-2 font-medium">
-                                        {isSearchingPrinters ? 'Пошук...' : 'Знайти всі принтери'}
+                                    <button onClick={searchPrinters} disabled={isSearchingPrinters} className="w-full bg-amber-600 text-white p-3 rounded-lg hover:bg-amber-700 disabled:opacity-50 flex items-center justify-center gap-2 font-medium whitespace-normal text-center h-auto min-h-[44px]">
+                                        {isSearchingPrinters ? 'Пошук...' : (Capacitor.isNativePlatform() ? 'Знайти всі принтери (вкл. BT)' : 'Знайти всі принтери')}
                                     </button>
                                 </div>
+                                {/* Web Bluetooth Button - Chrome Only, Not for Native App */}
+                                {!Capacitor.isNativePlatform() && (
+                                    <div className="mt-2">
+                                        <button onClick={printerData.connectBluetooth} className="w-full bg-indigo-600 text-white p-3 rounded-lg hover:bg-indigo-700 flex items-center justify-center gap-2 font-medium">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" /></svg>
+                                            Знайти Bluetooth
+                                        </button>
+                                        <p className="text-[10px] text-slate-400 mt-1 text-center">Chrome Only. Потрібен HTTPS. (Experimental)</p>
+                                    </div>
+                                )}
                                 {discoveredPrinters?.length > 0 && (
                                     <div className="space-y-2 mt-2 max-h-40 overflow-y-auto custom-scrollbar bg-white rounded border border-amber-100 p-1">
                                         {discoveredPrinters.map((dev: any) => (
@@ -139,6 +150,43 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                         ))}
                                     </div>
                                 )}
+                                {/* Manual IP Entry - Direct LAN (Native & Web) */}
+                                <div className="mb-4 pt-4 border-t border-amber-200">
+                                    <label className="text-xs font-bold text-amber-800 uppercase block mb-1">Пряме підключення (LAN IP):</label>
+                                    <div className="flex flex-col sm:flex-row gap-2">
+                                        <input
+                                            type="text"
+                                            id="manual-ip-input"
+                                            className="border border-amber-300 rounded px-2 py-2 text-sm flex-1"
+                                            placeholder="10.10.10.163"
+                                            defaultValue="10.10.10.163"
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                const ipInput = document.getElementById('manual-ip-input') as HTMLInputElement;
+                                                const ip = ipInput.value.trim();
+                                                if (!ip) return;
+
+                                                const manualDevice: ZebraDevice = {
+                                                    uid: ip,
+                                                    name: `LAN Printer (${ip})`,
+                                                    connection: 'net', // Important: 'net' for network
+                                                    deviceType: 'printer',
+                                                    manufacturer: 'Zebra',
+                                                    provider: 'Manual',
+                                                    version: '1.0'
+                                                };
+                                                selectPrinter(manualDevice);
+                                                alert(`Принтер ${ip} додано та вибрано!`);
+                                            }}
+                                            className="text-xs bg-amber-600 text-white px-4 py-3 rounded hover:bg-amber-700 font-bold uppercase tracking-wider"
+                                        >
+                                            Додати
+                                        </button>
+                                    </div>
+                                    <p className="text-[10px] text-amber-600 mt-1">Використовуйте для Android або якщо автопошук не працює. (Порт 9100)</p>
+                                </div>
+
                             </div>
                         </section>
                     )}

@@ -128,25 +128,25 @@ const DeferredPrintModal: React.FC<DeferredPrintModalProps> = ({
                     )}
                 </div>
 
-                <div className="p-4 border-t bg-white flex justify-between items-center gap-4">
+                <div className="p-4 border-t bg-white flex flex-col-reverse sm:flex-row justify-between items-center gap-4">
                     <button
                         onClick={onClear}
                         disabled={queue.length === 0 || processingIndex !== null}
-                        className="text-red-500 text-sm font-medium hover:underline disabled:opacity-50"
+                        className="text-red-500 text-sm font-medium hover:underline disabled:opacity-50 w-full sm:w-auto text-center"
                     >
                         Очистити все
                     </button>
-                    <div className="flex gap-2">
+                    <div className="flex flex-col-reverse sm:flex-row gap-2 w-full sm:w-auto">
                         <button
                             onClick={onClose}
-                            className="px-4 py-2 text-slate-500 font-medium hover:bg-slate-100 rounded-lg"
+                            className="px-4 py-3 sm:py-2 text-slate-500 font-medium hover:bg-slate-100 rounded-lg w-full sm:w-auto"
                         >
                             Закрити
                         </button>
                         <button
                             onClick={handlePrintAll}
                             disabled={queue.length === 0 || processingIndex !== null}
-                            className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md disabled:bg-slate-300 disabled:shadow-none flex items-center gap-2"
+                            className="px-6 py-3 sm:py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-md disabled:bg-slate-300 disabled:shadow-none flex items-center justify-center gap-2 w-full sm:w-auto"
                         >
                             <PrinterIcon />
                             Надрукувати Всі

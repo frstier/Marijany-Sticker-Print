@@ -1,12 +1,15 @@
+// Dynamic Import wrapper for SQLite
 import { Capacitor } from '@capacitor/core';
-import { CapacitorSQLite, SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
-import { USERS, PRODUCTS } from '../constants'; // Import initial data for seeding
+import { USERS, PRODUCTS } from '../constants';
 import { IDataService } from '../types/data';
 import { User, Product, LabelData } from '../types';
 
+// Type definitions needed for compilation
+import type { SQLiteConnection, SQLiteDBConnection } from '@capacitor-community/sqlite';
+
 const DB_NAME = 'zebra_db';
-const sqlite = new SQLiteConnection(CapacitorSQLite);
+let sqlite: SQLiteConnection | null = null;
 let db: SQLiteDBConnection | null = null;
 
 export const DatabaseService = {
@@ -17,7 +20,12 @@ export const DatabaseService = {
                 return;
             }
 
-            // 1. Create Connection
+            // 1. Create Connection (Lazy Init & Dynamic Import)
+            if (!sqlite) {
+                const { CapacitorSQLite, SQLiteConnection } = await import('@capacitor-community/sqlite');
+                sqlite = new SQLiteConnection(CapacitorSQLite);
+            }
+
             console.log('--- Initializing SQLite DB ---');
             db = await sqlite.createConnection(DB_NAME, false, 'no-encryption', 1, false);
 

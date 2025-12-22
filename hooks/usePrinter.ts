@@ -100,6 +100,14 @@ export function usePrinter() {
         searchPrinters,
         selectPrinter,
         fixSsl,
-        autoConnectPrinter
+        autoConnectPrinter,
+        connectBluetooth: async () => {
+            try {
+                const device = await zebraService.requestBluetoothDevice();
+                selectPrinter(device);
+            } catch (e: any) {
+                alert("Bluetooth Error: " + e.message);
+            }
+        }
     };
 }

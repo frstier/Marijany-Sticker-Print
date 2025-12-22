@@ -1,16 +1,121 @@
 import { Capacitor } from '@capacitor/core';
-import { CapacitorZebraPrinter } from 'capacitor-zebra-printer';
+// import { CapacitorZebraPrinter } from 'capacitor-zebra-printer'; // Dynamically imported
 import { ZebraDevice } from '../types';
 
 /**
  * Service Wrapper for Zebra Printing.
  * Supports:
  * 1. Web (Desktop): Uses official Zebra Browser Print SDK.
- * 2. Native (Android/iOS): Uses 'capacitor-zebra-printer' plugin.
+ * 2. Native (Android/iOS): Uses 'capacitor-zebra-printer' plugin or 'cordova-plugin-bluetooth-serial'
  */
 class ZebraService {
 
   private isNative = Capacitor.isNativePlatform();
+
+  // Web Bluetooth Config
+  // Standard Zebra UUIDs used for Serial Port Service usually
+  // Or generic Serial Port Profile UUID: 00001101-0000-1000-8000-00805F9B34FB (Classic) - Web Bluetooth mostly supports BLE
+  // For BLE Zebra often uses specific services.
+  // We will try to filter by name prefix "Hi" or "Zebra" or generic services
+  // NOTE: Web Bluetooth requires HTTPS and User Interaction.
+  private ZEBRA_SERVICE_UUID = '000018f0-0000-1000-8000-00805f9b34fb'; // Example Generic Service or specific Zebra BLE
+  // Actually, many Zebra generic BLE printers use a specific proprietary service or just standard Write/Read characteristics.
+  // Ideally we should list all services or use acceptAllDevices: true (but requires at least one service in optionalServices)
+
+  public async requestBluetoothDevice(): Promise<ZebraDevice> {
+    if (!navigator.bluetooth) {
+      throw new Error("Web Bluetooth API is not available (Require HTTPS & Chrome).");
+    }
+
+    try {
+      const device = await navigator.bluetooth.requestDevice({
+        // acceptAllDevices: true, // Optional: if we want to show all
+        filters: [
+          { namePrefix: 'Zebra' },
+          { namePrefix: 'XX' }, // Example placeholders
+          { namePrefix: 'Printer' }
+        ],
+        optionalServices: ['generic_access', 0x18f0] // Add checks for services
+        // Note: For real Zebra BLE, we often need the specific UUID key.
+        // If the user's printer is Classic Bluetooth, Web Bluetooth API (GATT) might NOT work on Desktop Chrome
+        // as Chrome only supports BLE (Bluetooth Low Energy) reliably, not BR/EDR.
+        // However, let's assume they have a modern BLE supported Zebra or we try.
+      });
+
+      if (!device || !device.gatt) {
+        throw new Error("Bluetooth Device selected but no GATT server found.");
+      }
+
+      const server = await device.gatt.connect();
+
+      // Construct a ZebraDevice object
+      const zebraDev: ZebraDevice = {
+        uid: device.id,
+        name: device.name || 'Bluetooth Printer',
+        connection: 'bluetooth_direct',
+        deviceType: 'printer',
+        manufacturer: 'Zebra',
+        provider: 'WebBluetooth',
+        version: '1.0',
+        gattServer: server // Store the server connection
+      };
+
+      return zebraDev;
+    } catch (e: any) {
+      console.error("Bluetooth pairing failed", e);
+      throw new Error(e.message || "Pairing Cancelled");
+    }
+  }
+
+  private async printViaWebBluetooth(device: ZebraDevice, zpl: string): Promise<boolean> {
+    try {
+      if (!device.gattServer || !device.gattServer.connected) {
+        // Reconnect if needed
+        if (device.gattServer && device.gattServer.device && device.gattServer.device.gatt) {
+          device.gattServer = await device.gattServer.device.gatt.connect();
+        } else {
+          throw new Error("Bluetooth Disconnected. Please pair again.");
+        }
+      }
+
+      const server = device.gattServer;
+      const services = await server.getPrimaryServices();
+
+      // Find a writable characteristic. 
+      // Zebra BLE often has a "Write" characteristic.
+      let charToUse: BluetoothRemoteGATTCharacteristic | null = null;
+
+      for (const s of services) {
+        const chars = await s.getCharacteristics();
+        for (const c of chars) {
+          if (c.properties.write || c.properties.writeWithoutResponse) {
+            charToUse = c;
+            break;
+          }
+        }
+        if (charToUse) break;
+      }
+
+      if (!charToUse) {
+        throw new Error("No writable characteristic found on this printer.");
+      }
+
+      // Chunk the ZPL data (Max MTU is often small ~20 or 512 bytes)
+      const encoder = new TextEncoder();
+      const data = encoder.encode(zpl);
+
+      const CHUNK_SIZE = 100; // Safe-ish limit for BLE
+      for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+        const chunk = data.slice(i, i + CHUNK_SIZE);
+        await charToUse.writeValue(chunk);
+      }
+
+      return true;
+    } catch (e) {
+      console.error("Bluetooth print failed", e);
+      return false;
+    }
+  }
 
   /**
    * Waits for the SDK to be available on the window object (Web only).
@@ -107,10 +212,33 @@ class ZebraService {
    */
   async getAllPrinters(): Promise<ZebraDevice[]> {
     if (this.isNative) {
-      // Native Discovery - Plugin v0.2.0 does not support auto-discovery.
-      // We will rely on manual entry or future implementation.
-      console.warn("Native discovery not supported by current plugin.");
-      return [];
+      console.log("Native Discovery: Scanning Bluetooth...");
+      return new Promise((resolve) => {
+        if (!window.bluetoothSerial) {
+          console.error("bluetoothSerial plugin missing!");
+          resolve([]);
+          return;
+        }
+
+        window.bluetoothSerial.list(
+          (bonded: any[]) => {
+            const devices: ZebraDevice[] = bonded.map((d: any) => ({
+              uid: d.address,
+              name: d.name,
+              connection: 'bluetooth_classic',
+              deviceType: 'printer',
+              manufacturer: 'Zebra',
+              provider: 'NativeBluetooth',
+              version: '1.0'
+            }));
+            resolve(devices);
+          },
+          (err: any) => {
+            console.error("Native Bluetooth List Failed:", err);
+            resolve([]);
+          }
+        );
+      });
     }
 
     // WEB Logic
@@ -142,14 +270,38 @@ class ZebraService {
     if (this.isNative) {
       try {
         console.log("Printing Native to:", device.uid);
-        // Plugin v0.2.0 print takes specific options. 
-        // We cast to any to avoid build errors if types are missing/incorrect.
+        const { CapacitorZebraPrinter } = await import('capacitor-zebra-printer');
+
+        if (device.connection === 'bluetooth_classic') {
+          // ... Bluetooth Logic (omitted for brevity, assume unchanged) ...
+          return new Promise((resolve) => {
+            if (!window.bluetoothSerial) { resolve(false); return; }
+            // ...
+            window.bluetoothSerial.isConnected(
+              () => { window.bluetoothSerial.write(zpl, () => resolve(true), () => resolve(false)); },
+              () => { window.bluetoothSerial.connect(device.uid, () => window.bluetoothSerial.write(zpl, () => resolve(true), () => resolve(false)), () => resolve(false)); }
+            );
+          });
+        }
+
+        // Direct LAN / Network Logic
+        if (device.connection === 'net' || device.provider === 'Manual') {
+          console.log("Direct LAN Print to:", device.uid);
+          await CapacitorZebraPrinter.print({
+            ip: device.uid,
+            port: 9100,
+            zpl: zpl
+          } as any);
+          return true;
+        }
+
+        // Fallback / Generic
         const res = await CapacitorZebraPrinter.print({
-          value: zpl, // Some versions use 'value'
-          zpl: zpl,   // Others use 'zpl'
-          address: device.uid,
-          ip: device.uid, // Try passing UID as IP if it's network
-          port: 9100      // Default zebra port
+          value: zpl,
+          zpl: zpl,
+          address: device.uid, // Might be MAC or IP
+          ip: device.uid,
+          port: 9100
         } as any);
 
         console.log("Native Print Result:", res);
@@ -158,6 +310,11 @@ class ZebraService {
         console.error("Native Print Error:", e);
         return false;
       }
+    }
+
+    // WEB Logic: Check for direct Bluetooth connection
+    if (device.connection === 'bluetooth_direct' && device.gattServer) {
+      return this.printViaWebBluetooth(device, zpl);
     }
 
     // WEB Logic
@@ -268,35 +425,62 @@ class ZebraService {
     });
   }
 
+  /**
+   * Helper to encode strings to ZPL Hex format (^FH is required in template).
+   * Example: "А" (UTF-8 bytes D0 90) -> "_D0_90"
+   */
+  private toZplHex(input: string): string {
+    if (!input) return "";
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(input);
+    let hexStr = "";
+    for (let i = 0; i < bytes.length; i++) {
+      // ZPL Hex uses underscore prefix like _20 for space
+      hexStr += "_" + bytes[i].toString(16).toUpperCase().padStart(2, "0");
+    }
+    return hexStr;
+  }
+
   generateZPL(template: string, data: { date: string; productName: string; sku: string; weight: string; serialNumber: string; sortLabel?: string; sortValue?: string; quantity?: number; logoZpl?: string; barcodePattern?: string }): string {
     let zpl = template;
 
     // Use custom pattern or default to Date-SKU-Batch-Weight
     const pattern = data.barcodePattern || '{date}-{sku}-{serialNumber}-{weight}';
 
-    let barcodeValue = pattern;
-    barcodeValue = barcodeValue.split('{date}').join(data.date);
-    barcodeValue = barcodeValue.split('{sku}').join(data.sku);
-    barcodeValue = barcodeValue.split('{serialNumber}').join(data.serialNumber);
-    barcodeValue = barcodeValue.split('{weight}').join(data.weight);
-    barcodeValue = barcodeValue.split('{productName}').join(data.productName);
+    let barcodeValueRaw = pattern;
+    barcodeValueRaw = barcodeValueRaw.split('{date}').join(data.date);
+    barcodeValueRaw = barcodeValueRaw.split('{sku}').join(data.sku);
+    barcodeValueRaw = barcodeValueRaw.split('{serialNumber}').join(data.serialNumber);
+    barcodeValueRaw = barcodeValueRaw.split('{weight}').join(data.weight);
+    barcodeValueRaw = barcodeValueRaw.split('{productName}').join(data.productName);
 
-    // Replace all occurrences in template
-    zpl = zpl.split('{date}').join(data.date);
-    zpl = zpl.split('{productName}').join(data.productName);
-    zpl = zpl.split('{sku}').join(data.sku);
-    zpl = zpl.split('{weight}').join(data.weight);
-    zpl = zpl.split('{serialNumber}').join(data.serialNumber);
-    zpl = zpl.split('{barcode}').join(barcodeValue);
+    // Encode Values for Safer Transport (Cyrillic Fix)
+    // We assume templates now have ^FH before each ^FD for these fields
+    const dateHex = this.toZplHex(data.date);
+    const productHex = this.toZplHex(data.productName);
+    const skuHex = this.toZplHex(data.sku);
+    const weightHex = this.toZplHex(data.weight);
+    const serialHex = this.toZplHex(data.serialNumber);
+    const sortLabelHex = this.toZplHex(data.sortLabel || 'Sort');
+    const sortValueHex = this.toZplHex(data.sortValue || '');
+    const barcodeHex = this.toZplHex(barcodeValueRaw);
+
+    // Replace all occurrences in template using HEX values
+    zpl = zpl.split('{date}').join(dateHex);
+    zpl = zpl.split('{productName}').join(productHex);
+    zpl = zpl.split('{sku}').join(skuHex);
+    zpl = zpl.split('{weight}').join(weightHex);
+    zpl = zpl.split('{serialNumber}').join(serialHex);
+    zpl = zpl.split('{barcode}').join(barcodeHex);
 
     // Dynamic Sort/Fraction Label & Value
-    zpl = zpl.split('{sortLabel}').join(data.sortLabel || 'Sort');
-    zpl = zpl.split('{sortValue}').join(data.sortValue || '');
+    zpl = zpl.split('{sortLabel}').join(sortLabelHex);
+    zpl = zpl.split('{sortValue}').join(sortValueHex);
 
-    // Quantity
+    // Quantity (Not encoded, just number)
     zpl = zpl.split('{quantity}').join(data.quantity ? data.quantity.toString() : '1');
 
-    // Logo (if provided, else remove placeholder)
+    // Logo (if provided, else remove placeholder) - Logo is usually already hex data, so no encoding needed unless it's text
     zpl = zpl.split('{logo}').join(data.logoZpl || '');
 
     return zpl;

@@ -7,10 +7,22 @@ interface LoginScreenProps {
     users?: User[];
 }
 
+import InfoModal from './InfoModal';
+// abort
+// ... other imports if needed, but LoginScreen uses imports at top. 
+// Easier to replace the whole return or significant chunks.
+
+// I will insert the button and modal logic.
+// ReplacementContent will target the main component block.
+
 const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users = USERS }) => {
-    const [selectedUser, setSelectedUser] = useState<User>(USERS[0]); // Default to Accountant
+    // Default to Accountant (role: 'accountant') or first user
+    const [selectedUser, setSelectedUser] = useState<User>(() => {
+        return users.find(u => u.role === 'accountant') || users[0];
+    });
     const [pin, setPin] = useState('');
     const [error, setError] = useState('');
+    const [isInfoOpen, setIsInfoOpen] = useState(false);
 
     const handleKeyPress = (key: string) => {
         if (pin.length < 4) {
@@ -48,14 +60,27 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users = USERS }) => 
     const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'empty', '0', 'back'];
 
     return (
-        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden">
+        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 relative">
+            {/* Info Button in Header */}
+            <button
+                onClick={() => setIsInfoOpen(true)}
+                className="absolute top-4 right-4 md:top-8 md:right-8 bg-white p-2 md:p-3 rounded-full shadow-lg text-slate-500 hover:text-[#115740] hover:scale-110 transition-all z-10"
+                title="Інструкція"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 md:h-8 md:w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+            </button>
+
+            <InfoModal isOpen={isInfoOpen} onClose={() => setIsInfoOpen(false)} />
+
+            <div className="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden relative z-0">
                 <div className="bg-[#115740] p-4 md:p-6 text-center">
                     <div className="w-16 h-16 md:w-20 md:h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-3 md:mb-4 shadow-lg p-3">
                         <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
                     </div>
                     <h1 className="text-xl md:text-2xl font-bold text-white">Авторизація</h1>
-                    <p className="text-emerald-100 text-sm mt-1 mb-1">Marijany Sticker Print</p>
+                    <p className="text-emerald-100 text-sm mt-1 mb-1">Marijany Sticker Print v0.9b</p>
                 </div>
 
                 <div className="p-6">

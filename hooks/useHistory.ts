@@ -140,7 +140,7 @@ export function useHistory() {
                 "Час": dateObj.toLocaleTimeString('uk-UA'),
                 "Продукт": item.product?.name || "",
                 "SKU": item.product?.sku || "",
-                "Сорт/Фракція": item.sortLabel || "",
+                "Сорт/Фракція": item.sortValue || "", // Updated to use Value (e.g. "1st Grade") instead of Label ("Sort")
                 "Вага (кг)": Number(item.weight),
                 "Статус": statusLabel
             };

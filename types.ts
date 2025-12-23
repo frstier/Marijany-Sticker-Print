@@ -14,6 +14,7 @@ export interface User {
 export interface Product {
   id: string;
   name: string;
+  name_en?: string;
   sku: string;
   category: ProductCategory;
   sorts?: string[];
@@ -27,6 +28,7 @@ export interface LabelData {
   sortLabel?: string;
   sortValue?: string;
   timestamp?: string;
+  status?: 'ok' | 'error' | 'cancelled' | 'deferred';
   // Deprecated: sort?: string;
 }
 

@@ -23,7 +23,11 @@ export function useDeferredPrint() {
     };
 
     const addToQueue = (item: LabelData) => {
-        const newQueue = [...queue, { ...item, timestamp: new Date().toISOString() }];
+        const newQueue = [...queue, { ...item, timestamp: new Date().toISOString(), status: 'deferred' as const }];
+        // Wait, types.ts says status?: 'ok' | 'error' | 'cancelled'.
+        // When we add to queue, it's NOT printed yet. So no status.
+        // When we PRINT from queue, we will save to history with 'ok' or 'error'.
+        // So this file actually doesn't strictly NEED changes unless we want 'queued' status in history? No.
         saveQueue(newQueue);
     };
 

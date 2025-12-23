@@ -78,9 +78,9 @@ export default function App() {
         const prepareLogos = async () => {
             try {
                 const logoPath = import.meta.env.BASE_URL + 'logo_bw.png';
-                const small = await zebraService.convertImageToZPL(logoPath, { width: 80, height: 50 });
+                const small = await zebraService.convertImageToZPL(logoPath, { width: 80, height: 80 });
                 setLogoZplSmall(small);
-                const large = await zebraService.convertImageToZPL(logoPath, { width: 200, height: 120 });
+                const large = await zebraService.convertImageToZPL(logoPath, { width: 200, height: 200 }); // Square logo
                 setLogoZplLarge(large);
                 console.log("Logos converted to ZPL successfully");
             } catch (e) {
@@ -139,9 +139,7 @@ export default function App() {
         return <LoginScreen onLogin={login} users={authUsers} />;
     }
 
-    if (isDataLoading) {
-        return <div className="flex items-center justify-center min-h-screen text-slate-500 font-bold">Loading Database...</div>;
-    }
+
 
     // Derived State for Current Product
     const currentSerialNumber = selectedProduct ? (productCounters[selectedProduct.id] ?? INITIAL_SERIAL) : INITIAL_SERIAL;
@@ -260,15 +258,16 @@ export default function App() {
         const logoToUse = selectedLabelSize.id === '100x100' ? logoZplLarge : logoZplSmall;
 
         // Custom Template Logic:
-        // If Product is 'Short Fiber' (id: 2) AND Size is 100x100 -> Use Offset Template
+        // If Product is 'Short Fiber' (id: 2) OR 'Hurds Calibrated' (id: 3) AND Size is 100x100 -> Use Offset Template
         let zplTemplate = selectedLabelSize.template;
-        if (data.product?.id === '2' && selectedLabelSize.id === '100x100') {
+        if ((data.product?.id === '2' || data.product?.id === '3') && selectedLabelSize.id === '100x100') {
             zplTemplate = ZPL_100x100_OFFSET;
         }
 
         const zpl = zebraService.generateZPL(zplTemplate, {
             date: data.date,
             productName: data.product?.name || 'Unknown',
+            productNameEn: data.product?.name_en || '',
             sku: data.product?.sku || '',
             weight: data.weight,
             serialNumber: data.serialNumber.toString(),
@@ -288,35 +287,21 @@ export default function App() {
             success = true;
         }
 
-        if (success) {
-            // Add to history
-            const timestamp = new Date().toISOString();
-            historyData.addToHistory({ ...data, timestamp });
+        let status: 'ok' | 'error' = success ? 'ok' : 'error';
 
-            // Only increment counter if we are printing the CURRENT selection (naive check)
-            // If printing from Queue, we probably shouldn't increment the *current* counter on screen
-            // unless the queue item IS the current item?
-            // Actually, queues usually have their own serial.
-            // Queue item MUST have its serial frozen.
-
-            // Logic: executePrint (Main UI) calls this. 
-            // So executePrint is responsible for incrementing counter.
-            return true;
-        } else {
-            // alert("Помилка друку.");
-            return false;
+        // Add to history (Status Saved)
+        const timestamp = new Date().toISOString();
+        if (printerData.printer || true) { // Always save, even if mock
+            historyData.addToHistory({ ...data, timestamp, status });
         }
+
         return success;
     };
 
     // Wrapper for Main UI Print
     const executeMainPrint = async (copies: number) => {
-        // Duplicate Check
-        if (historyData.checkDuplicate(selectedProduct!.id, currentSerialNumber)) {
-            if (!window.confirm(`Етикетка для "${selectedProduct!.name}" з номером #${currentSerialNumber} вже існує в історії.\n\nБажаєте перезаписати (створити дублікат)?`)) {
-                return; // Cancel
-            }
-        }
+        // Strict Duplicate Check REMOVED - System now overwrites/updates automatically via DB logic.
+        // User requested: "If it exists, overwrite it."
 
         const success = await handlePrintLabelData(labelData, copies);
         if (success) {
@@ -350,6 +335,22 @@ export default function App() {
         }
     };
 
+    const handleReprint = (item: LabelData) => {
+        if (item.product) {
+            // Find the full product object from availableProducts to ensure consistency
+            const fullProduct = availableProducts.find(p => p.id === item.product!.id) || item.product;
+            setSelectedProduct(fullProduct);
+
+            // Set Counter to the historical serial number so it prints THAT number
+            setProductCounters(prev => ({
+                ...prev,
+                [fullProduct.id]: item.serialNumber
+            }));
+        }
+        setWeight(item.weight);
+        setIsSettingsOpen(false);
+    };
+
     const isPrintDisabled = !selectedProduct || !weight;
 
     return (
@@ -373,6 +374,7 @@ export default function App() {
                 historyData={historyData}
                 reportEmail={historyData.reportEmail}
                 onReportEmailChange={historyData.setReportEmail}
+                onReprint={handleReprint}
             />
 
             {/* Deferred Print Modal */}
@@ -392,9 +394,6 @@ export default function App() {
                 onLogout={logout}
                 onSettingsClick={() => setIsSettingsOpen(true)}
                 printerData={printerData}
-                onRefreshPrinter={printerData.autoConnectPrinter}
-                onOpenQueue={() => setIsQueueOpen(true)}
-                queueCount={deferredData.queue.length}
             />
 
             {/* Main Content - Scrollable */}
@@ -403,13 +402,19 @@ export default function App() {
                 <div className="max-w-7xl mx-auto">
 
 
-                    <div className="grid lg:grid-cols-2 gap-6">
-                        {/* LEFT COLUMN: Inputs */}
+                    <div className="max-w-xl mx-auto space-y-6">
+                        {/* INPUTS SECTIONS */}
                         <div className="space-y-4 md:space-y-6">
                             {/* PRODUCT SELECTOR */}
                             <section className="bg-white p-3 md:p-6 rounded-xl md:rounded-2xl shadow-sm border border-slate-200">
                                 <div className="flex justify-between items-center mb-3 md:mb-4">
-                                    <h2 className="text-lg md:text-xl font-bold text-slate-800">Виберіть продукт</h2>
+                                    <h2 className="text-lg md:text-xl font-bold text-slate-800">
+                                        {selectedProduct ? (
+                                            <span className="text-[#115740]">{selectedProduct.name} <span className="text-slate-400 font-normal text-sm ml-1">/ {selectedProduct.name_en}</span></span>
+                                        ) : (
+                                            "Виберіть продукт"
+                                        )}
+                                    </h2>
                                     <span className="text-xs md:text-sm font-medium text-slate-400">
                                         {availableProducts.length} позицій
                                     </span>
@@ -426,7 +431,7 @@ export default function App() {
                                     {selectedProduct && (
                                         <div className={`mt-0 pt-0 border-t-0 flex-1 animate-fade-in ${currentUser?.role === 'operator' && selectedProduct.id !== '3' ? 'w-full' : ''}`}>
                                             <div className="flex justify-between items-center mb-2 md:mb-3">
-                                                <label className="text-xs md:text-sm font-bold text-slate-600 uppercase tracking-wide">Серіал</label>
+                                                <label className="text-xs md:text-sm font-bold text-slate-600 uppercase tracking-wide">№ продукції</label>
                                                 <span className="text-[10px] md:text-xs font-medium text-slate-400 truncate max-w-[80px]">
                                                     {currentUser?.role === 'operator' ? 'Тільки перегляд' : 'Ред.'}
                                                 </span>
@@ -442,19 +447,14 @@ export default function App() {
                                                 </button>
                                                 <input
                                                     type="number"
-                                                    inputMode="numeric" // Force numeric keypad on Android/iOS
-                                                    pattern="[0-9]*"    // Fallback
+                                                    inputMode="numeric"
+                                                    pattern="[0-9]*"
                                                     value={currentSerialNumber}
-                                                    readOnly={currentUser?.role === 'operator'} // Operators cannot edit manually, only +/- or not at all?
-                                                    // Allow manual edit for others
+                                                    readOnly={currentUser?.role === 'operator'}
                                                     onChange={(e) => {
                                                         const val = parseInt(e.target.value);
                                                         if (!isNaN(val) && val >= 1) {
                                                             setProductCounters(prev => ({ ...prev, [selectedProduct.id]: val }));
-                                                        } else if (e.target.value === '') {
-                                                            // Allow temporary empty state while typing if needed, 
-                                                            // but usually easier to keep it controlled. 
-                                                            // For now simple number update.
                                                         }
                                                     }}
                                                     className={`flex-1 w-full min-w-[60px] bg-white border-2 border-slate-200 rounded-lg text-center text-lg md:text-xl font-mono font-bold text-slate-800 focus:border-[#115740] focus:outline-none transition-colors h-10 md:h-12 ${currentUser?.role === 'operator' ? 'bg-slate-50 text-slate-500' : ''}`}
@@ -475,9 +475,7 @@ export default function App() {
                                     {selectedProduct && selectedProduct.sorts && selectedProduct.sorts.length > 0 && (
                                         (currentUser?.role !== 'operator' || selectedProduct.id === '3') && (
                                             <div className="mt-0 pt-0 border-t-0 flex-1 animate-fade-in">
-                                                <div className="flex justify-between items-center mb-2 md:mb-3">
-                                                    <label className="text-xs md:text-sm font-bold text-slate-600 uppercase tracking-wide">Сорт</label>
-                                                </div>
+
                                                 <SortSelect
                                                     sorts={selectedProduct.sorts}
                                                     selectedSort={selectedSort}
@@ -513,114 +511,44 @@ export default function App() {
                             </section>
                         </div>
 
-                        {/* RIGHT COLUMN: Preview & Action */}
-                        <div className="flex flex-col gap-4 md:gap-6">
-                            <section className="bg-white p-3 md:p-6 rounded-xl md:rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h2 className="text-lg md:text-xl font-bold text-slate-800">Попередній перегляд</h2>
-                                    <div className="px-3 py-1 bg-slate-100 rounded-full text-[10px] md:text-xs font-bold text-slate-500">
-                                        {selectedLabelSize.name}
-                                    </div>
-                                </div>
-
-                                <div className="flex-1 flex flex-col items-center justify-center min-h-[220px] md:min-h-[300px] bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 p-4 relative overflow-hidden group">
-                                    {/* Label Preview Component */}
-                                    <div className="scale-75 md:scale-100 transition-transform origin-center shadow-2xl">
-                                        <LabelPreview
-                                            data={labelData}
-                                            widthMm={selectedLabelSize.widthMm}
-                                            heightMm={selectedLabelSize.heightMm}
-                                            isSerialEditing={isSerialEditing}
-                                            onSerialEdit={handleEditIconClick}
-                                            tempSerialInput={tempSerialInput}
-                                            onSerialChange={setTempSerialInput}
-                                            onSerialBlur={handleSerialBlur}
-                                        />
-                                    </div>
-                                </div>
-                            </section>
-
-                            {/* Desktop Print Button (Hidden on Mobile) */}
-                            <button
-                                onClick={handlePrintClick}
-                                disabled={isPrintDisabled}
-                                className={`hidden md:flex w-full py-4 md:py-6 px-4 md:px-6 rounded-xl md:rounded-2xl font-bold text-xl md:text-2xl shadow-xl transition-all transform active:scale-[0.98] items-center justify-center gap-3 md:gap-4 ${isPrintDisabled
-                                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
-                                    : 'bg-[#115740] hover:bg-[#0d4633] text-white shadow-green-900/30 ring-4 ring-[#115740]/20'
-                                    }`}
-                            >
-                                <PrinterIcon />
-                                {selectedProduct && weight ? 'ДРУКУВАТИ' : 'ЗАПОВНІТЬ ДАНІ'}
-                            </button>
-
-                            {/* Deferred Print Button */}
-                            {!isPrintDisabled && ['admin', 'accountant', 'lab'].includes(currentUser?.role || '') && (
-                                <button
-                                    onClick={() => {
-                                        // Duplicate Check
-                                        if (historyData.checkDuplicate(selectedProduct!.id, currentSerialNumber)) {
-                                            if (!window.confirm(`Етикетка для "${selectedProduct!.name}" з номером #${currentSerialNumber} вже існує в історії.\n\nБажаєте додати в чергу (створити дублікат)?`)) {
-                                                return; // Cancel
-                                            }
-                                        }
-
-                                        deferredData.addToQueue(labelData);
-                                        setWeight('');
-                                        setProductCounters(prev => ({
-                                            ...prev,
-                                            [selectedProduct!.id]: (prev[selectedProduct!.id] ?? INITIAL_SERIAL) + 1
-                                        }));
-                                        alert("Додано в чергу друку!");
-                                    }}
-                                    className="w-full py-4 px-6 rounded-xl font-bold text-lg border-2 border-[#115740] text-[#115740] hover:bg-green-50 transition-colors flex items-center justify-center gap-2"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    Відкласти друк
-                                </button>
-                            )}
-
-                            <p className="text-center text-slate-400 text-sm font-medium">
-                                Підказка: Натисніть двічі для друку 2 копій
-                            </p>
-                        </div>
                     </div>
                 </div>
             </main>
-            {/* Sticky Mobile Footer Print Button */}
-            <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 md:hidden z-40 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] flex gap-3">
-                {/* Deferred Print Mobile Button */}
-                {!isPrintDisabled && ['admin', 'accountant', 'lab'].includes(currentUser?.role || '') && (
-                    <button
-                        onClick={() => {
-                            if (historyData.checkDuplicate(selectedProduct!.id, currentSerialNumber)) {
-                                if (!window.confirm(`Етикетка для "${selectedProduct!.name}" з номером #${currentSerialNumber} вже існує в історії.\n\nБажаєте додати в чергу (створити дублікат)?`)) return;
-                            }
-                            deferredData.addToQueue(labelData);
-                            setWeight('');
-                            setProductCounters(prev => ({ ...prev, [selectedProduct!.id]: (prev[selectedProduct!.id] ?? INITIAL_SERIAL) + 1 }));
-                            alert("Додано в чергу!");
-                        }}
-                        className="flex-1 py-3 rounded-xl font-bold text-lg border-2 border-[#115740] text-[#115740] hover:bg-green-50 active:bg-green-100 transition-colors flex items-center justify-center"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                    </button>
-                )}
 
-                <button
-                    onClick={handlePrintClick}
-                    disabled={isPrintDisabled}
-                    className={`flex-[3] py-3 rounded-xl font-bold text-xl shadow-lg transition-all transform active:scale-[0.98] flex items-center justify-center gap-2 ${isPrintDisabled
-                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                        : 'bg-[#115740] text-white shadow-green-900/20'
-                        }`}
-                >
-                    <PrinterIcon />
-                    {selectedProduct && weight ? 'ДРУК' : 'ЗАПОВНІТЬ'}
-                </button>
+            {/* Universal Sticky Footer Actions */}
+            <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_-4px_rgba(0,0,0,0.15)]">
+                <div className="p-4 flex gap-3 md:gap-4 max-w-7xl mx-auto md:px-8">
+                    {/* Deferred Print Button */}
+                    {!isPrintDisabled && (
+                        <button
+                            onClick={() => {
+                                deferredData.addToQueue(labelData);
+                                setWeight('');
+                                setProductCounters(prev => ({ ...prev, [selectedProduct!.id]: (prev[selectedProduct!.id] ?? INITIAL_SERIAL) + 1 }));
+                                alert("Додано в чергу!");
+                            }}
+                            className="flex-1 py-3 md:py-4 rounded-xl font-bold text-lg md:text-xl border-2 border-[#115740] text-[#115740] hover:bg-green-50 active:bg-green-100 transition-colors flex items-center justify-center gap-2 group"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 md:h-7 md:w-7 transition-transform group-active:scale-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span className="hidden md:inline">Відкласти друк</span>
+                            <span className="md:hidden">Відкласти</span>
+                        </button>
+                    )}
+
+                    <button
+                        onClick={handlePrintClick}
+                        disabled={isPrintDisabled}
+                        className={`flex-[3] py-3 md:py-4 rounded-xl font-bold text-xl md:text-2xl shadow-lg transition-all transform active:scale-[0.98] flex items-center justify-center gap-3 ${isPrintDisabled
+                            ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                            : 'bg-[#115740] hover:bg-[#0d4633] text-white shadow-green-900/30 ring-0 hover:ring-4 hover:ring-[#115740]/20'
+                            }`}
+                    >
+                        <PrinterIcon />
+                        {selectedProduct && weight ? 'ДРУКУВАТИ' : 'ЗАПОВНІТЬ ДАНІ'}
+                    </button>
+                </div>
             </div>
         </div>
     );

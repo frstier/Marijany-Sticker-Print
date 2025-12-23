@@ -6,7 +6,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   return {
-    base: '/Marijany-Sticker-Print/',
+    base: './', // Relative base for Capacitor/Local
     test: {
       globals: true,
       environment: 'jsdom',

@@ -6,14 +6,14 @@ import { Product, LabelSizeConfig, User } from './types';
 export { ZPL_100x100_OFFSET };
 
 export const PRODUCTS: Product[] = [
-  { id: '1', name: 'Довге волокно', sku: 'LF', category: 'fiber', sorts: ['1', '2', '3', '4'] },
-  { id: '2', name: 'Коротке волокно', sku: 'SF', category: 'fiber', sorts: ['1', '2', '3', '4'] },
-  { id: '3', name: 'Костра калібрована', sku: 'HC', category: 'shiv', sorts: ['+1.5 мм', '-1.5 мм+1.0 мм', '-1.0 мм'] },
-  { id: '4', name: 'Костра некалібрована', sku: 'HU', category: 'shiv', sorts: ['1', '2', '3'] },
-  { id: '5', name: 'Костра мілкодисперсна', sku: 'HF', category: 'dust' },
-  { id: '6', name: 'Висівки насіння', sku: 'SB', category: 'dust' },
-  { id: '7', name: 'Транспортуючий шпагат', sku: 'TT', category: 'fiber' }, // Using 'fiber' category for Twine as generic
-  { id: '8', name: 'Невпорядкована треста', sku: 'US', category: 'fiber' },
+  { id: '1', name: 'Довге волокно', name_en: 'Long Fiber', sku: 'LF', category: 'fiber', sorts: ['1', '2', '3', '4'] },
+  { id: '2', name: 'Коротке волокно', name_en: 'Short Fiber', sku: 'SF', category: 'fiber', sorts: ['1', '2', '3', '4'] },
+  { id: '3', name: 'Костра калібрована', name_en: 'Hurds Calibrated', sku: 'HC', category: 'shiv', sorts: ['-5.0 мм +1.5 мм', '-5.0 мм +0.8 мм', '-1.5 мм +1.0 мм', '-1.5 мм +0.8 мм', '-0.8 мм +0.25 мм', '-1.0 мм', '-0.8 мм', '-0.25 мм'] },
+  { id: '4', name: 'Костра некалібрована', name_en: 'Hurds uncalibrated', sku: 'HU', category: 'shiv', sorts: ['1', '2', '3'] },
+  { id: '5', name: 'Костра мілкодисперсна', name_en: 'Hurds Finelydisperced', sku: 'HF', category: 'dust' },
+  { id: '6', name: 'Висівки насіння', name_en: 'Seed Bran', sku: 'SB', category: 'dust' },
+  { id: '7', name: 'Транспортуючий шпагат', name_en: 'Transporting Twine', sku: 'TT', category: 'fiber' },
+  { id: '8', name: 'Невпорядкована треста', name_en: 'Unregulated stock', sku: 'US', category: 'fiber' },
 ];
 
 export const USERS: User[] = [
@@ -40,12 +40,10 @@ const ZPL_100x100 = `
 ^FO30,70^A0N,40,40^FH^FD{date}^FS
 
 ^FO30,150^A0N,30,30^FDProduct:^FS
-^FO30,190^A0N,50,50^FH^FD{productName}^FS
+^FO30,185^A0N,45,45^FH^FD{productName}^FS
+^FO30,230^A0N,30,30^FH^FD{productNameEn}^FS
 
 ^FO580,30{logo}^FS
-
-^FO500,150^A0N,30,30^FH^FD{sortLabel}:^FS
-^FO500,190^A0N,40,40^FH^FD{sortValue}^FS
 
 ^FO30,280^A0N,30,30^FDSKU:^FS
 ^FO130,280^A0N,30,30^FH^FD{sku}^FS
@@ -53,12 +51,17 @@ const ZPL_100x100 = `
 ^FO30,360^A0N,40,40^FDWeight:^FS
 ^FO200,340^A0N,100,100^FH^FD{weight} kg^FS
 
-^FO30,500^A0N,30,30^FDSerial No:^FS
-^FO30,540^A0N,40,40^FH^FD#{serialNumber}^FS
+^FO500,360^A0N,30,30^FH^FD{sortLabel}:^FS
+^FO500,400^A0N,40,40^FH^FD{sortValue}^FS
 
-^FO100,600^BY2
+^FO30,480^A0N,30,30^FDSerial No:^FS
+^FO30,520^A0N,40,40^FH^FD#{serialNumber}^FS
+
+^FO100,580^BY2
 ^BCN,100,Y,N,N
 ^FH^FD{barcode}^FS
+
+^FO10,730^A0N,18,18^FB780,3,,C^FD12101, Ukraine, Zhytomyr region, Zhytomyr district, Khoroshivska territorial community, Buildings complex No. 18^FS
 
 ^PQ{quantity}
 ^XZ
@@ -77,25 +80,28 @@ const ZPL_100x100_OFFSET = `
 ^FO30,190^A0N,40,40^FH^FD{date}^FS
 
 ^FO30,240^A0N,30,30^FDProduct:^FS
-^FO30,280^A0N,50,50^FH^FD{productName}^FS
+^FO30,275^A0N,45,45^FH^FD{productName}^FS
+^FO30,320^A0N,30,30^FH^FD{productNameEn}^FS
 
 ^FO580,150{logo}^FS
 
-^FO500,240^A0N,30,30^FH^FD{sortLabel}:^FS
-^FO500,280^A0N,40,40^FH^FD{sortValue}^FS
+^FO30,370^A0N,30,30^FDSKU:^FS
+^FO130,370^A0N,30,30^FH^FD{sku}^FS
 
-^FO30,360^A0N,30,30^FDSKU:^FS
-^FO130,360^A0N,30,30^FH^FD{sku}^FS
+^FO30,450^A0N,40,40^FDWeight:^FS
+^FO200,430^A0N,100,100^FH^FD{weight} kg^FS
 
-^FO30,440^A0N,40,40^FDWeight:^FS
-^FO200,420^A0N,100,100^FH^FD{weight} kg^FS
+^FO500,450^A0N,30,30^FH^FD{sortLabel}:^FS
+^FO500,490^A0N,40,40^FH^FD{sortValue}^FS
 
-^FO30,570^A0N,30,30^FDSerial No:^FS
-^FO30,610^A0N,40,40^FH^FD#{serialNumber}^FS
+^FO30,550^A0N,30,30^FDSerial No:^FS
+^FO30,590^A0N,40,40^FH^FD#{serialNumber}^FS
 
-^FO100,670^BY2
-^BCN,90,Y,N,N
+^FO100,630^BY2
+^BCN,80,Y,N,N
 ^FH^FD{barcode}^FS
+
+^FO10,755^A0N,18,18^FB780,3,,C^FD12101, Ukraine, Zhytomyr region, Zhytomyr district, Khoroshivska territorial community, Buildings complex No. 18^FS
 
 ^PQ{quantity}
 ^XZ
@@ -109,17 +115,18 @@ const ZPL_58x30 = `
 ^CI28
 
 ^FO10,10^A0N,25,25^FH^FD{productName}^FS
+^FO10,35^A0N,20,20^FH^FD{productNameEn}^FS
 
 ^FO360,10{logo}^FS
 
-^FO100,50^A0N,30,30^FH^FDDate: {date}^FS
+^FO100,60^A0N,25,25^FH^FDDate: {date}^FS
 
-^FO10,85^A0N,45,45^FH^FD{weight} kg^FS
-^FO220,95^A0N,25,25^FH^FD{sortLabel}:{sortValue}^FS
+^FO10,95^A0N,45,45^FH^FD{weight} kg^FS
+^FO220,105^A0N,25,25^FH^FD{sortLabel}:{sortValue}^FS
 
-^FO280,130^A0N,20,20^FH^FD#{serialNumber}^FS
+^FO280,140^A0N,20,20^FH^FD#{serialNumber}^FS
 
-^FO40,155^BY1
+^FO40,165^BY1
 ^BCN,40,Y,N,N
 ^FH^FD{barcode}^FS
 

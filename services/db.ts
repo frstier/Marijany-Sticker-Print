@@ -34,6 +34,7 @@ export const DatabaseService = {
             console.log('--- DB Opened ---');
 
             // 3. Create Tables
+            // 3. Create Tables
             const schema = `
         CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
@@ -45,6 +46,7 @@ export const DatabaseService = {
         CREATE TABLE IF NOT EXISTS products (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
+            name_en TEXT,
             sku TEXT NOT NULL,
             category TEXT,
             sorts TEXT -- JSON stringified array
@@ -59,83 +61,55 @@ export const DatabaseService = {
             serial_number INTEGER,
             sort_label TEXT,
             sort_value TEXT,
-            synced INTEGER DEFAULT 0
+            status TEXT DEFAULT 'ok',
+            synced INTEGER DEFAULT 0,
+            UNIQUE(sku, serial_number)
         );
       `;
 
             await db.execute(schema);
             console.log('--- Tables Verified ---');
 
-            // 4. Seed Data (if empty)
-            await this.seedData();
+            // 4. Seed/Sync Data
+            await this.syncProducts();
+            await this.seedUsers();
+
+            // Migration for Status Column and Unique Constraint support
+            try {
+                await db.execute("ALTER TABLE history ADD COLUMN status TEXT DEFAULT 'ok'");
+            } catch (e) { /* Ignore */ }
+            try {
+                await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_history_sku_serial ON history(sku, serial_number)");
+            } catch (e) { /* Ignore */ }
 
         } catch (e) {
             console.error('Database Initialization Error:', e);
         }
     },
 
-    async seedData() {
-        if (!db) return;
-
-        // Check if users exist
-        const result = await db.query('SELECT count(*) as count FROM users');
-        if (result.values && result.values[0].count > 0) {
-            console.log('--- Data already seeded ---');
-            return;
-        }
-
-        console.log('--- Seeding Initial Data ---');
-
-        // Seed Users
-        for (const u of USERS) {
-            await db.run('INSERT INTO users (id, name, role, pin) VALUES (?, ?, ?, ?)', [u.id, u.name, u.role, u.pin]);
-        }
-
-        // Seed Products
-        for (const p of PRODUCTS) {
-            await db.run('INSERT INTO products (id, name, sku, category, sorts) VALUES (?, ?, ?, ?, ?)',
-                [p.id, p.name, p.sku, p.category, JSON.stringify(p.sorts || [])]
-            );
-        }
-        console.log('--- Seeding Complete ---');
-    },
-
-    async getConnection(): Promise<SQLiteDBConnection | null> {
-        if (!db) await this.init();
-        return db;
-    },
-
-    // --- CRUD Implementation ---
-
-    async getProducts(): Promise<Product[]> {
-        if (!db) return [];
-        const res = await db.query('SELECT * FROM products');
-        return (res.values?.map(p => ({
-            ...p,
-            sorts: JSON.parse(p.sorts || '[]')
-        })) || []) as Product[];
-    },
-
-    async getUsers(): Promise<User[]> {
-        if (!db) return [];
-        const res = await db.query('SELECT * FROM users');
-        return (res.values || []) as User[];
-    },
+    // ... (seedUsers, syncProducts, getConnection)
 
     async addToHistory(entry: LabelData & { timestamp?: string }): Promise<void> {
         if (!db) return;
 
         // Ensure timestamp is present
         const timestamp = entry.timestamp || new Date().toISOString();
-        const { product, weight, serialNumber, sortLabel, sortValue } = entry;
+        const { product, weight, serialNumber, sortLabel, sortValue, status } = entry;
 
         // Safety check for product
         if (!product) return;
 
+        // INSERT OR REPLACE to handle duplicates by overwriting
         await db.run(
-            `INSERT INTO history (timestamp, product_name, sku, weight, serial_number, sort_label, sort_value) 
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [timestamp, product.name, product.sku, weight, serialNumber, sortLabel, sortValue]
+            `INSERT INTO history (timestamp, product_name, sku, weight, serial_number, sort_label, sort_value, status) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(sku, serial_number) DO UPDATE SET
+                timestamp = excluded.timestamp,
+                weight = excluded.weight,
+                sort_label = excluded.sort_label,
+                sort_value = excluded.sort_value,
+                status = excluded.status`,
+            [timestamp, product.name, product.sku, weight, serialNumber, sortLabel, sortValue, status || 'ok']
         );
     },
 
@@ -195,5 +169,29 @@ export const DatabaseService = {
             console.error('Backup failed:', error);
             throw error;
         }
+    },
+
+    async getReportData(startDate: Date, endDate: Date): Promise<LabelData[]> {
+        if (!db) return [];
+        // SQLite date comparison string format: YYYY-MM-DDTHH:MM:SS.SSSZ
+        // We use string comparison for ISO dates
+        const startStr = startDate.toISOString();
+        const endStr = endDate.toISOString();
+
+        const res = await db.query(
+            'SELECT * FROM history WHERE timestamp >= ? AND timestamp <= ? ORDER BY timestamp DESC',
+            [startStr, endStr]
+        );
+
+        if (!res.values) return [];
+
+        return res.values.map((row: any) => ({
+            date: row.timestamp,
+            product: { name: row.product_name, sku: row.sku, id: '0' } as any,
+            weight: row.weight,
+            serialNumber: row.serial_number,
+            sortLabel: row.sort_label,
+            sortValue: row.sort_value
+        }));
     }
 };

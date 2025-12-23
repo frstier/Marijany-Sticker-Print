@@ -33,7 +33,7 @@ const SortSelect: React.FC<SortSelectProps> = ({ sorts, selectedSort, onSelect, 
     };
 
     return (
-        <div className="mt-4 pt-4 border-t border-slate-100 animate-fade-in" ref={containerRef}>
+        <div className="mt-4 border-slate-100 animate-fade-in" ref={containerRef}>
             <label className="block mb-2 text-sm font-medium text-slate-700 uppercase tracking-wide">{label}</label>
             <div className="relative">
                 <button
@@ -50,14 +50,14 @@ const SortSelect: React.FC<SortSelectProps> = ({ sorts, selectedSort, onSelect, 
                 </button>
 
                 {isOpen && (
-                    <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden z-50 max-h-60 overflow-y-auto animate-fade-in-down">
+                    <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden z-[100] max-h-60 overflow-y-auto animate-fade-in-down">
                         {sorts.map((sort) => (
                             <div
                                 key={sort}
                                 onClick={() => handleSelect(sort)}
                                 className={`p-3 cursor-pointer transition-colors border-b border-slate-100 last:border-0 font-bold ${selectedSort === sort
-                                        ? 'bg-emerald-50 text-[#115740]'
-                                        : 'text-slate-700 hover:bg-slate-50'
+                                    ? 'bg-emerald-50 text-[#115740]'
+                                    : 'text-slate-700 hover:bg-slate-50'
                                     }`}
                             >
                                 {sort}

@@ -74,9 +74,8 @@ const ProductSelect: React.FC<ProductSelectProps> = ({ products, selectedProduct
             {/* Trigger Button */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className={`w-full bg-slate-50 border transition-all text-left flex items-center justify-between p-3 md:p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#115740] ${
-                    isOpen ? 'border-[#115740] ring-1 ring-[#115740]' : 'border-slate-300'
-                }`}
+                className={`w-full bg-slate-50 border transition-all text-left flex items-center justify-between p-3 md:p-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#115740] ${isOpen ? 'border-[#115740] ring-1 ring-[#115740]' : 'border-slate-300'
+                    }`}
             >
                 {selectedProduct ? (
                     <div className="flex items-center gap-3 overflow-hidden">
@@ -91,7 +90,7 @@ const ProductSelect: React.FC<ProductSelectProps> = ({ products, selectedProduct
                 ) : (
                     <span className="text-slate-500 text-lg">-- Оберіть товар --</span>
                 )}
-                
+
                 <div className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>
                     <ChevronDownIcon />
                 </div>
@@ -99,16 +98,15 @@ const ProductSelect: React.FC<ProductSelectProps> = ({ products, selectedProduct
 
             {/* Dropdown Menu */}
             {isOpen && (
-                <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden z-50 max-h-80 overflow-y-auto animate-fade-in-down">
+                <div className="absolute top-full left-0 w-full mt-2 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden z-[100] max-h-80 overflow-y-auto animate-fade-in-down">
                     {products.map((product) => (
                         <div
                             key={product.id}
                             onClick={() => handleSelect(product)}
-                            className={`flex items-center gap-3 p-3 cursor-pointer transition-colors border-b border-slate-100 last:border-0 ${
-                                selectedProduct?.id === product.id 
-                                ? 'bg-green-50' 
-                                : 'hover:bg-slate-50'
-                            }`}
+                            className={`flex items-center gap-3 p-3 cursor-pointer transition-colors border-b border-slate-100 last:border-0 ${selectedProduct?.id === product.id
+                                    ? 'bg-green-50'
+                                    : 'hover:bg-slate-50'
+                                }`}
                         >
                             <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${getCategoryStyles(product.category)}`}>
                                 <ProductIcon category={product.category} />

@@ -16,10 +16,26 @@ import InfoModal from './InfoModal';
 // ReplacementContent will target the main component block.
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users = USERS }) => {
-    // Default to Accountant (role: 'accountant') or first user
+    // Default to Operator (role: 'operator') or first user
+    // Default to Operator (role: 'operator') or first user
+    // SAFEGUARD: If users is empty, avoid crashing
     const [selectedUser, setSelectedUser] = useState<User>(() => {
-        return users.find(u => u.role === 'accountant') || users[0];
+        if (!users || users.length === 0) {
+            // Return a dummy user to prevent crash on initial render, though we'll show an error UI better
+            return { id: 'error', name: 'Error', role: 'operator', pin: '' };
+        }
+        return users.find(u => u.role === 'operator') || users[0];
     });
+
+    if (!users || users.length === 0) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-red-100 text-red-600 p-8 text-center font-bold text-xl">
+                Помилка: Список користувачів порожній.
+                <br />
+                Перевірте constants.ts або базу даних.
+            </div>
+        );
+    }
     const [pin, setPin] = useState('');
     const [error, setError] = useState('');
     const [isInfoOpen, setIsInfoOpen] = useState(false);

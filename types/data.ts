@@ -1,4 +1,4 @@
-import { User, Product, LabelData } from './index';
+import { User, Product, LabelData } from '../types';
 
 export interface IDataService {
     init(): Promise<void>;
@@ -11,6 +11,6 @@ export interface IDataService {
     // Write
     addToHistory(entry: LabelData & { timestamp?: string }): Promise<void>;
 
-    // Future: 
-    // updateProductCount(id: string, count: number): Promise<void>;
+    // Reporting
+    getReportData(startDate: Date, endDate: Date): Promise<LabelData[]>;
 }

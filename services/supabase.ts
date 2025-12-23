@@ -100,10 +100,38 @@ export const SupabaseService: IDataService & { updateCredentials: (u: string, k:
             serial_number: entry.serialNumber,
             sort_label: entry.sortLabel,
             sort_value: entry.sortValue,
+            status: entry.status || 'ok',
             created_at: entry.timestamp || new Date().toISOString()
         };
 
-        const { error } = await supabase.from('history').insert([payload]);
-        if (error) console.error("Supabase Insert Error:", error);
+        // Use Upsert to overwrite if SKU+SerialNumber exists
+        // Requires a unique constraint on (sku, serial_number) in Supabase
+        const { error } = await supabase.from('history').upsert([payload], { onConflict: 'sku, serial_number' });
+        if (error) console.error("Supabase Save Error:", error);
+    },
+
+    async getReportData(startDate: Date, endDate: Date): Promise<LabelData[]> {
+        if (!supabase) return [];
+
+        const { data, error } = await supabase
+            .from('history')
+            .select('*')
+            .gte('created_at', startDate.toISOString())
+            .lte('created_at', endDate.toISOString())
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error("Supabase Report Error:", error);
+            return [];
+        }
+
+        return data.map((row: any) => ({
+            date: row.created_at,
+            product: { name: row.product_name, sku: row.sku, id: '0' },
+            weight: row.weight,
+            serialNumber: row.serial_number,
+            sortLabel: row.sort_label,
+            sortValue: row.sort_value
+        })) as unknown as LabelData[];
     }
 };

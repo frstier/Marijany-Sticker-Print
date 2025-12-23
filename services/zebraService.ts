@@ -441,7 +441,19 @@ class ZebraService {
     return hexStr;
   }
 
-  generateZPL(template: string, data: { date: string; productName: string; sku: string; weight: string; serialNumber: string; sortLabel?: string; sortValue?: string; quantity?: number; logoZpl?: string; barcodePattern?: string }): string {
+  generateZPL(template: string, data: {
+    date: string;
+    productName: string;
+    productNameEn?: string;
+    sku: string;
+    weight: string;
+    serialNumber: string;
+    sortLabel?: string;
+    sortValue?: string;
+    quantity?: number;
+    logoZpl?: string;
+    barcodePattern?: string
+  }): string {
     let zpl = template;
 
     // Use custom pattern or default to Date-SKU-Batch-Weight
@@ -458,6 +470,7 @@ class ZebraService {
     // We assume templates now have ^FH before each ^FD for these fields
     const dateHex = this.toZplHex(data.date);
     const productHex = this.toZplHex(data.productName);
+    const productEnHex = this.toZplHex(data.productNameEn || '');
     const skuHex = this.toZplHex(data.sku);
     const weightHex = this.toZplHex(data.weight);
     const serialHex = this.toZplHex(data.serialNumber);
@@ -468,6 +481,7 @@ class ZebraService {
     // Replace all occurrences in template using HEX values
     zpl = zpl.split('{date}').join(dateHex);
     zpl = zpl.split('{productName}').join(productHex);
+    zpl = zpl.split('{productNameEn}').join(productEnHex);
     zpl = zpl.split('{sku}').join(skuHex);
     zpl = zpl.split('{weight}').join(weightHex);
     zpl = zpl.split('{serialNumber}').join(serialHex);

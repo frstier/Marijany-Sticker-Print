@@ -62,6 +62,22 @@ export function useHistory() {
     const [reportSummary, setReportSummary] = useState<{ count: number, totalWeight: number }>({ count: 0, totalWeight: 0 });
     const [reportData, setReportData] = useState<LabelData[]>([]);
 
+    // Helper to parse DD.MM.YYYY string
+    const parseDateStr = (dateStr: string | undefined): Date => {
+        if (!dateStr) return new Date();
+        // If ISO format (e.g. 2024-12-24T...)
+        if (dateStr.includes('T') || dateStr.includes('-')) {
+            return new Date(dateStr);
+        }
+        // If DD.MM.YYYY
+        const parts = dateStr.split('.');
+        if (parts.length === 3) {
+            // new Date(year, monthIndex, day)
+            return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+        }
+        return new Date(dateStr); // Fallback
+    };
+
     async function generateReport(startDate: Date, endDate: Date) {
         let data: LabelData[] = [];
         try {
@@ -74,7 +90,8 @@ export function useHistory() {
         if (data.length === 0 && history.length > 0) {
             console.log("Using local history state for report generation");
             data = history.filter(item => {
-                const itemDate = new Date(item.date);
+                const itemDate = parseDateStr(item.date);
+                // Compare timestamps if available for precision, otherwise day comparison
                 return itemDate >= startDate && itemDate <= endDate;
             });
         }
@@ -86,7 +103,7 @@ export function useHistory() {
                 const queue: LabelData[] = JSON.parse(queueStr);
                 const deferredItems = queue.filter(item => {
                     const ts = (item as any).timestamp || item.date;
-                    const itemDate = new Date(ts);
+                    const itemDate = ts.includes('T') ? new Date(ts) : parseDateStr(item.date);
                     return itemDate >= startDate && itemDate <= endDate;
                 });
 
@@ -95,8 +112,8 @@ export function useHistory() {
 
                 // Sort by date descending (newest first)
                 data.sort((a, b) => {
-                    const dateA = new Date((a as any).timestamp || a.date).getTime();
-                    const dateB = new Date((b as any).timestamp || b.date).getTime();
+                    const dateA = new Date((a as any).timestamp || parseDateStr(a.date)).getTime();
+                    const dateB = new Date((b as any).timestamp || parseDateStr(b.date)).getTime();
                     return dateB - dateA;
                 });
             }
@@ -121,11 +138,11 @@ export function useHistory() {
     // Shared Data Mapping Helper
     const getDataForExport = (dataset: LabelData[]) => {
         return dataset.map(item => {
-            let dateObj: Date;
-            try {
-                dateObj = new Date(item.date || (item as any).timestamp);
-                if (isNaN(dateObj.getTime())) dateObj = new Date();
-            } catch { dateObj = new Date(); }
+            let dateObj: Date = parseDateStr(item.date);
+            // If timestamp exists, prefer it for Time info
+            if (item.timestamp) {
+                dateObj = new Date(item.timestamp);
+            }
 
             const statusMap: Record<string, string> = {
                 'ok': 'ОК',
@@ -140,7 +157,8 @@ export function useHistory() {
                 "Час": dateObj.toLocaleTimeString('uk-UA'),
                 "Продукт": item.product?.name || "",
                 "SKU": item.product?.sku || "",
-                "Сорт/Фракція": item.sortValue || "", // Updated to use Value (e.g. "1st Grade") instead of Label ("Sort")
+                "№": item.serialNumber,
+                "Сорт/Фракція": item.sortValue || "",
                 "Вага (кг)": Number(item.weight),
                 "Статус": statusLabel
             };
@@ -164,9 +182,9 @@ export function useHistory() {
     // Helper to get raw CSV string (Legacy support if needed, or for quick debug)
     const getCSVContent = (dataset: LabelData[] = history): string => {
         const BOM = "\uFEFF";
-        const headers = ["Дата", "Час", "Продукт", "SKU", "Сорт/Фракція", "Вага (кг)", "Статус"];
+        const headers = ["Дата", "Час", "Продукт", "SKU", "№", "Сорт/Фракція", "Вага (кг)", "Статус"];
         const rows = getDataForExport(dataset).map(r =>
-            [r["Дата"], r["Час"], r["Продукт"], r["SKU"], r["Сорт/Фракція"], r["Вага (кг)"], r["Статус"]]
+            [r["Дата"], r["Час"], r["Продукт"], r["SKU"], (r as any)["№"], r["Сорт/Фракція"], r["Вага (кг)"], r["Статус"]]
                 .map(val => `"${(val || '').toString().replace(/"/g, '""')}"`)
                 .join(",")
         );

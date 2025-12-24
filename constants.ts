@@ -22,6 +22,7 @@ export const USERS: User[] = [
   { id: '1', name: 'Обліковець', role: 'accountant', pin: '3333' },
   { id: '3', name: 'Агро', role: 'agro', pin: '4444' },
   { id: '4', name: 'Адміністратор', role: 'admin', pin: '7777' },
+  { id: '99', name: 'TEST Postgres', role: 'postgres_user', pin: '9999' },
 ];
 
 export const INITIAL_SERIAL = 1;

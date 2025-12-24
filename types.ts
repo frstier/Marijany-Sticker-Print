@@ -1,7 +1,7 @@
 // Basic Product Types
 export type ProductCategory = 'fiber' | 'shiv' | 'dust';
 
-export type UserRole = 'accountant' | 'lab' | 'agro' | 'admin' | 'operator';
+export type UserRole = 'accountant' | 'lab' | 'agro' | 'admin' | 'operator' | 'postgres_user';
 
 export interface User {
   id: string;
@@ -21,12 +21,14 @@ export interface Product {
 }
 
 export interface LabelData {
+  id?: string; // Added for unique identification
   product: Product | null;
   weight: string;
   serialNumber: number;
   date: string;
   sortLabel?: string;
   sortValue?: string;
+  barcode?: string; // EXACT generated barcode string
   timestamp?: string;
   status?: 'ok' | 'error' | 'cancelled' | 'deferred';
   // Deprecated: sort?: string;

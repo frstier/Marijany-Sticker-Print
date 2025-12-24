@@ -317,6 +317,14 @@ class ZebraService {
       return this.printViaWebBluetooth(device, zpl);
     }
 
+    // VIRTUAL PRINTER (Test Mode)
+    if (device.connection === 'virtual') {
+      console.log(`[VIRTUAL PRINTER] Printing: ${zpl.substring(0, 50)}...`);
+      // Simulate delay
+      await new Promise(r => setTimeout(r, 500));
+      return true;
+    }
+
     // WEB Logic
     const isLoaded = await this.waitForSdk();
     if (!isLoaded || !device) return false;
@@ -441,6 +449,26 @@ class ZebraService {
     return hexStr;
   }
 
+  /**
+   * Public helper to generate the barcode string based on pattern and data.
+   * Useful for saving the exact same barcode to DB that was printed.
+   */
+  formatBarcode(pattern: string, data: {
+    date: string;
+    sku: string;
+    serialNumber: string;
+    weight: string;
+    productName: string;
+  }): string {
+    let result = pattern || '{date}-{sku}-{serialNumber}-{weight}';
+    result = result.split('{date}').join(data.date);
+    result = result.split('{sku}').join(data.sku);
+    result = result.split('{serialNumber}').join(data.serialNumber);
+    result = result.split('{weight}').join(data.weight);
+    result = result.split('{productName}').join(data.productName);
+    return result;
+  }
+
   generateZPL(template: string, data: {
     date: string;
     productName: string;
@@ -459,12 +487,14 @@ class ZebraService {
     // Use custom pattern or default to Date-SKU-Batch-Weight
     const pattern = data.barcodePattern || '{date}-{sku}-{serialNumber}-{weight}';
 
-    let barcodeValueRaw = pattern;
-    barcodeValueRaw = barcodeValueRaw.split('{date}').join(data.date);
-    barcodeValueRaw = barcodeValueRaw.split('{sku}').join(data.sku);
-    barcodeValueRaw = barcodeValueRaw.split('{serialNumber}').join(data.serialNumber);
-    barcodeValueRaw = barcodeValueRaw.split('{weight}').join(data.weight);
-    barcodeValueRaw = barcodeValueRaw.split('{productName}').join(data.productName);
+    // Generate barcode content using shared logic
+    const barcodeValueRaw = this.formatBarcode(pattern, {
+      date: data.date,
+      sku: data.sku,
+      serialNumber: data.serialNumber,
+      weight: data.weight,
+      productName: data.productName
+    });
 
     // Encode Values for Safer Transport (Cyrillic Fix)
     // We assume templates now have ^FH before each ^FD for these fields

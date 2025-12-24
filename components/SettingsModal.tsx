@@ -132,6 +132,78 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 </div>
                             </section>
 
+                            {/* Printer Search (Admin Only) */}
+                            {isAdmin && (
+                                <section className="pt-4 border-t border-slate-100">
+                                    <h4 className="font-semibold text-slate-700 mb-3 text-sm uppercase tracking-wider flex items-center gap-2">
+                                        <SearchIcon /> Пошук Принтерів (Zebra Browser Print)
+                                    </h4>
+
+                                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+
+                                        {/* Current Status */}
+                                        <div className="mb-4 bg-white p-3 rounded border border-slate-200 shadow-sm">
+                                            <div className="text-xs text-slate-500 uppercase font-bold mb-1">Поточний принтер</div>
+                                            {printerData?.printer ? (
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                                                    <span className="font-bold text-slate-800">{printerData.printer.name}</span>
+                                                    <span className="text-xs text-slate-400">({printerData.printer.connection})</span>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-2 text-slate-400">
+                                                    <div className="w-3 h-3 rounded-full bg-slate-300"></div>
+                                                    <span>Не вибрано / Відключено</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="flex gap-2 mb-3">
+                                            <input
+                                                className="border border-slate-300 rounded px-2 py-2 text-sm flex-1"
+                                                value={printerData?.agentIp || '127.0.0.1'}
+                                                onChange={(e) => printerData?.setAgentIp(e.target.value)}
+                                                placeholder="IP агента (127.0.0.1)"
+                                            />
+                                            <button
+                                                onClick={printerData?.searchPrinters}
+                                                disabled={printerData?.isSearchingPrinters}
+                                                className="bg-blue-600 text-white px-4 rounded hover:bg-blue-700 font-bold text-sm"
+                                            >
+                                                {printerData?.isSearchingPrinters ? 'Пошук...' : 'Пошук'}
+                                            </button>
+                                        </div>
+
+                                        {/* Discovered List */}
+                                        {printerData?.discoveredPrinters && printerData.discoveredPrinters.length > 0 && (
+                                            <div className="space-y-2 max-h-40 overflow-y-auto">
+                                                {printerData.discoveredPrinters.map((device: ZebraDevice) => (
+                                                    <div
+                                                        key={device.uid}
+                                                        onClick={() => {
+                                                            printerData.selectPrinter(device);
+                                                            alert(`Принтер ${device.name} вибрано!`);
+                                                        }}
+                                                        className="bg-white p-2 border border-slate-200 rounded flex justify-between items-center cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                                                    >
+                                                        <div>
+                                                            <div className="font-bold text-sm text-slate-800">{device.name}</div>
+                                                            <div className="text-xs text-slate-500">{device.uid} ({device.connection})</div>
+                                                        </div>
+                                                        <div className="bg-slate-100 text-slate-600 text-[10px] px-2 py-1 rounded">Вибрати</div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {printerData?.discoveredPrinters?.length === 0 && !printerData?.isSearchingPrinters && (
+                                            <div className="text-center text-xs text-slate-400 py-2">
+                                                Натисніть "Пошук", щоб знайти принтери.
+                                            </div>
+                                        )}
+                                    </div>
+                                </section>
+                            )}
+
                             {/* Manual IP Entry - Direct LAN (ADMIN/ALL) */}
                             {isAdmin && (
                                 <section className="pt-4 border-t border-slate-100">

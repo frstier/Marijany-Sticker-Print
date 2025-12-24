@@ -1,0 +1,17 @@
+export interface BatchItem {
+    serialNumber: number;
+    weight: number;
+    productName: string;
+    sort: string; // The grade/quality
+    date: string;
+    // Original ZPL or parsed data could be stored here if needed
+}
+
+export interface Batch {
+    id: string; // Unique Pallet ID (e.g., "P-20251224-001")
+    date: string;
+    items: BatchItem[];
+    totalWeight: number;
+    sort: string; // The sort for the *entire* batch. All items must match or be compatible.
+    status: 'open' | 'closed'; // Open = building, Closed = printed/finalized
+}

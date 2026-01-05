@@ -19,6 +19,11 @@ import {
 import { UserService } from '../../services/userService';
 import { Product, User } from '../../types';
 
+// New Features
+import AnalyticsDashboard from '../AnalyticsDashboard';
+import AuditLogViewer from '../AuditLogViewer';
+import QRScanner from '../QRScanner';
+
 export default function AdminInterface() {
     const { logout, currentUser } = useAuth();
     const printerData = usePrinter();
@@ -44,6 +49,11 @@ export default function AdminInterface() {
     const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
     const [logoutConfirm, setLogoutConfirm] = useState(false);
+
+    // New Feature Modals
+    const [showAnalytics, setShowAnalytics] = useState(false);
+    const [showAuditLog, setShowAuditLog] = useState(false);
+    const [showQRScanner, setShowQRScanner] = useState(false);
 
     const handleLogoutClick = () => {
         if (logoutConfirm) {
@@ -685,11 +695,67 @@ export default function AdminInterface() {
                                     + Generate Dummy Data (Test)
                                 </button>
                             </div>
+
+                            {/* Admin Tools */}
+                            <div className="pt-6 border-t">
+                                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">🛠️ Інструменти</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <button
+                                        onClick={() => setShowAnalytics(true)}
+                                        className="flex items-center gap-3 p-4 bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
+                                    >
+                                        <span className="text-2xl">📊</span>
+                                        <div className="text-left">
+                                            <div className="text-sm opacity-80">Аналітика</div>
+                                            <div>Dashboard</div>
+                                        </div>
+                                    </button>
+                                    <button
+                                        onClick={() => setShowAuditLog(true)}
+                                        className="flex items-center gap-3 p-4 bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
+                                    >
+                                        <span className="text-2xl">📋</span>
+                                        <div className="text-left">
+                                            <div className="text-sm opacity-80">Журнал</div>
+                                            <div>Audit Log</div>
+                                        </div>
+                                    </button>
+                                    <button
+                                        onClick={() => setShowQRScanner(true)}
+                                        className="flex items-center gap-3 p-4 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
+                                    >
+                                        <span className="text-2xl">📷</span>
+                                        <div className="text-left">
+                                            <div className="text-sm opacity-80">Сканер</div>
+                                            <div>QR/Barcode</div>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     )}
 
                 </main>
             </div>
+
+            {/* Feature Modals */}
+            <AnalyticsDashboard
+                printHistory={historyData.history || []}
+                onClose={() => setShowAnalytics(false)}
+                isOpen={showAnalytics}
+            />
+            <AuditLogViewer
+                isOpen={showAuditLog}
+                onClose={() => setShowAuditLog(false)}
+            />
+            <QRScanner
+                isOpen={showQRScanner}
+                onClose={() => setShowQRScanner(false)}
+                onScan={(code) => {
+                    alert(`Scanned: ${code}`);
+                    setShowQRScanner(false);
+                }}
+            />
         </div>
     );
 }

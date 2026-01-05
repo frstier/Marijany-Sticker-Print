@@ -30,9 +30,11 @@ ChartJS.register(
 interface AnalyticsDashboardProps {
     printHistory: LabelData[];
     onClose: () => void;
+    isOpen?: boolean;
 }
 
-const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ printHistory, onClose }) => {
+const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ printHistory, onClose, isOpen = true }) => {
+    if (!isOpen) return null;
     // Calculate stats
     const stats = useMemo(() => {
         const now = new Date();

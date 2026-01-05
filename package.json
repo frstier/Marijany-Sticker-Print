@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:web": "vite build --base=/Marijany-Sticker-Print/",
+    "build:web": "vite build --base=./ && cp dist/index.html dist/404.html",
     "build:apk": "npm run build && npx cap sync && cd android && ./gradlew assembleDebug",
     "preview": "vite preview",
     "test": "vitest",

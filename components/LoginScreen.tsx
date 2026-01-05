@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { USERS } from '../constants';
+import logoImg from '/logo.png';
 
 interface LoginScreenProps {
     onLogin: (user: User) => void;
@@ -121,7 +122,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users = USERS }) => 
             <div className="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden relative z-0">
                 <div className="bg-[#115740] p-4 md:p-6 text-center">
                     <div className="w-16 h-16 md:w-20 md:h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-3 md:mb-4 shadow-lg p-3">
-                        <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+                        <img src={logoImg} alt="Logo" className="w-full h-full object-contain" />
                     </div>
                     <h1 className="text-xl md:text-2xl font-bold text-white">Авторизація</h1>
                     <p className="text-emerald-100 text-sm mt-1 mb-1">HeMP v1.0</p>

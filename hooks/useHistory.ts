@@ -33,9 +33,16 @@ export function useHistory() {
         loadHistory();
     }, []);
 
-    const addToHistory = async (entry: LabelData) => {
+    const addToHistory = async (entry: LabelData, currentUser?: any) => {
+        const enrichedEntry = {
+            ...entry,
+            operatorId: currentUser?.id,
+            operatorName: currentUser?.name,
+            timestamp: new Date().toISOString()
+        };
+
         // Update State
-        const newHistory = [entry, ...history].slice(0, 100);
+        const newHistory = [enrichedEntry, ...history].slice(0, 500); // Increased limit for better history
         setHistory(newHistory);
 
         // Save Local
@@ -43,10 +50,60 @@ export function useHistory() {
 
         // Save via DataManager (DB or Cloud)
         try {
-            await DataManager.getService().addToHistory(entry);
+            await DataManager.getService().addToHistory(enrichedEntry);
         } catch (e) {
             console.error("Failed to save to DataService", e);
         }
+    };
+
+    const updateHistoryEntry = async (updatedEntry: LabelData, currentUser: any) => {
+        // Permission Check
+        const existing = history.find(h => h.id === updatedEntry.id);
+        if (!existing) return;
+
+        const isOwner = existing.operatorId === currentUser.id;
+        const isAdmin = currentUser.role === 'admin';
+
+        if (!isOwner && !isAdmin) {
+            alert("Ви можете редагувати тільки власні записи");
+            return;
+        }
+
+        const newHistory = history.map(h => h.id === updatedEntry.id ? updatedEntry : h);
+        setHistory(newHistory);
+        localStorage.setItem(LOCAL_STORAGE_HISTORY_KEY, JSON.stringify(newHistory));
+
+        try {
+            // If DataService supports update, otherwise we might need specific method
+            await DataManager.getService().addToHistory(updatedEntry); // Overwrite if same ID
+        } catch (e) { console.error(e); }
+    };
+
+    const deleteHistoryEntry = async (id: string, currentUser: any) => {
+        const existing = history.find(h => h.id === id);
+        if (!existing) return;
+
+        const isOwner = existing.operatorId === currentUser.id;
+        const isAdmin = currentUser.role === 'admin';
+
+        if (!isOwner && !isAdmin) {
+            alert("Ви можете видаляти тільки власні записи");
+            return;
+        }
+
+        if (!window.confirm("Видалити цей запис?")) return;
+
+        const newHistory = history.filter(h => h.id !== id);
+        setHistory(newHistory);
+        localStorage.setItem(LOCAL_STORAGE_HISTORY_KEY, JSON.stringify(newHistory));
+
+        // Note: DataService might need deleteHistoryEntry implementation if not existing
+        try {
+            const service = DataManager.getService() as any;
+            if (service.deleteHistoryEntry) {
+                await service.deleteHistoryEntry(id);
+            }
+        } catch (e) { console.error(e); }
     };
 
     const clearHistory = () => {
@@ -161,6 +218,8 @@ export function useHistory() {
                 "Сорт/Фракція": item.sortValue || "",
                 "Вага (кг)": Number(item.weight),
                 "Штрих-код": item.barcode || "",
+                "Оператор": item.operatorName || "",
+                "ID Зміни": item.shiftId || "",
                 "Статус": statusLabel
             };
         });
@@ -265,10 +324,9 @@ export function useHistory() {
     };
 
     // SEND EMAIL (Updated to use XLSX)
-    const sendEmail = async (dataset: LabelData[] = history) => {
+    const sendEmail = async (dataset: LabelData[] = history): Promise<{ success: boolean; message: string; file?: File }> => {
         if (dataset.length === 0) {
-            alert("Дані для експорту відсутні");
-            return;
+            return { success: false, message: "Дані для експорту відсутні" };
         }
 
         const dateStr = new Date().toLocaleDateString('uk-UA');
@@ -280,24 +338,22 @@ export function useHistory() {
         // 1. Generate XLSX File
         const file = generateXLSXFile(dataset);
 
-        // 2. Try EmailJS (Still text summary mostly, unless we enhance it)
+        // 2. Try EmailJS
         const { EmailService } = await import('../services/email');
         if (EmailService.isConfigured()) {
-            // ... existing logic ...
-            const recipient = reportEmail || '';
+            const recipient = reportEmail || localStorage.getItem('zebra_report_email_v1') || '';
             if (recipient) {
                 try {
                     await EmailService.sendReport(dataset, recipient);
-                    alert(`✅ Звіт (текстова версія) відправлено на ${recipient}`);
-                    return;
+                    return { success: true, message: `Звіт відправлено на ${recipient}`, file };
                 } catch (e) {
                     console.error("EmailJS sending failed", e);
-                    if (!confirm("EmailJS помилка. Спробувати нативний метод (поділитися файлом)?")) return;
+                    // Continue to fallback
                 }
             }
         }
 
-        // 3. Fallback: Native Share (Preferred for Files)
+        // 3. Fallback: Native Share
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
             try {
                 await navigator.share({
@@ -305,19 +361,15 @@ export function useHistory() {
                     text: body,
                     files: [file]
                 });
-                return;
-            } catch (err) { console.warn("Share failed", err); }
+                return { success: true, message: "Відкрито вікно відправки", file };
+            } catch (err) {
+                console.warn("Share failed", err);
+                // Continue to fallback
+            }
         }
 
-        // 4. Last Resort: Mailto (Manual attachment)
-        // We download the file first so user has it
-        await exportXlsx(dataset);
-
-        setTimeout(() => {
-            const recipient = reportEmail ? reportEmail : '';
-            const mailtoLink = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body + "\n\n(Файл збережено в документах. Будь ласка, прикріпіть його вручну.)")}`;
-            window.location.href = mailtoLink;
-        }, 1000);
+        // 4. Last Resort: Just return the file for manual download
+        return { success: false, message: "Авто-відправка не вдалася. Спробуйте завантажити файл вручну.", file };
     };
 
     // NEW: We just return true/false if it exists locally, but we DON'T block in UI anymore based on this alone for "Overwrite" logic.
@@ -365,6 +417,8 @@ export function useHistory() {
         // Reporting
         generateReport,
         reportSummary,
-        reportData
+        reportData,
+        updateHistoryEntry,
+        deleteHistoryEntry
     };
 }

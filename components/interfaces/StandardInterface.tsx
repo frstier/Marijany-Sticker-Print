@@ -13,6 +13,8 @@ import Header from '../Header';
 import SettingsModal from '../SettingsModal';
 import { PrinterIcon, QueueListIcon } from '../Icons';
 import DeferredPrintModal from '../DeferredPrintModal';
+import ShiftCloseConfirmModal from '../ShiftCloseConfirmModal';
+import PrintHistoryModal from '../PrintHistoryModal';
 
 // Hooks
 import { usePrinter } from '../../hooks/usePrinter';
@@ -20,6 +22,9 @@ import { useHistory } from '../../hooks/useHistory';
 import { useAuth } from '../../hooks/useAuth';
 import { useData } from '../../hooks/useData';
 import { useDeferredPrint } from '../../hooks/useDeferredPrint';
+
+// Services
+import { shiftService, Shift, ShiftSummary } from '../../services/shiftService';
 
 const LOCAL_STORAGE_COUNTERS_KEY = 'zebra_product_counters_v1';
 
@@ -40,6 +45,14 @@ export default function StandardInterface() {
     const [selectedLabelSize, setSelectedLabelSize] = useState<LabelSizeConfig>(LABEL_SIZES[0]);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isQueueOpen, setIsQueueOpen] = useState(false);
+
+    // Shift Management
+    const [activeShift, setActiveShift] = useState<Shift | null>(() => shiftService.getCurrentShift());
+    const [showShiftOpenModal, setShowShiftOpenModal] = useState(false);
+    const [showShiftConfirmModal, setShowShiftConfirmModal] = useState(false);
+    const [showShiftCloseModal, setShowShiftCloseModal] = useState(false);
+    const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+    const [shiftCloseData, setShiftCloseData] = useState<{ shift: Shift; summary: ShiftSummary; emailStatus?: { success: boolean, message: string }, file?: File } | null>(null);
 
     // Barcode Pattern State (Moved to Top)
     const [barcodePattern, setBarcodePattern] = useState(() => {
@@ -127,7 +140,52 @@ export default function StandardInterface() {
         try {
             localStorage.setItem(LOCAL_STORAGE_COUNTERS_KEY, JSON.stringify(productCounters));
         } catch (e) { console.error(e); }
+
     }, [productCounters]);
+
+    // Shift Check on Mount
+    useEffect(() => {
+        if (!activeShift && currentUser?.role === 'operator') {
+            setShowShiftOpenModal(true);
+        }
+    }, [currentUser, activeShift]);
+
+    // Handlers
+    const handleShiftOpen = () => {
+        if (currentUser) {
+            try {
+                const shift = shiftService.openShift(currentUser);
+                setActiveShift(shift);
+                setShowShiftOpenModal(false);
+            } catch (e: any) {
+                alert(e.message);
+            }
+        }
+    };
+
+    const handleShiftCloseRequest = () => {
+        setShowShiftConfirmModal(true);
+    };
+
+    const confirmShiftClose = async () => {
+        try {
+            const result = shiftService.closeShift();
+            setShowShiftConfirmModal(false);
+
+            // Send Email Report and get status
+            const emailResult = await historyData.sendEmail(result.shift.prints);
+
+            setShiftCloseData({
+                ...result,
+                emailStatus: { success: emailResult.success, message: emailResult.message },
+                file: emailResult.file
+            });
+            setActiveShift(null);
+            setShowShiftCloseModal(true);
+        } catch (e: any) {
+            alert(e.message);
+        }
+    };
 
 
     // Derived State for Current Product
@@ -289,10 +347,29 @@ export default function StandardInterface() {
 
         let status: 'ok' | 'error' = success ? 'ok' : 'error';
 
-        // Add to history (Status Saved)
+        // Add to history (Status Saved) with Ownership
         const timestamp = new Date().toISOString();
         if (printerData.printer || true) { // Always save, even if mock
-            historyData.addToHistory({ ...finalData, timestamp, status });
+            historyData.addToHistory({
+                ...finalData,
+                timestamp,
+                status,
+                shiftId: activeShift?.id
+            }, currentUser);
+        }
+
+        // Add to Active Shift
+        if (shiftService.hasActiveShift()) {
+            shiftService.addPrintToShift({
+                ...finalData,
+                timestamp,
+                status,
+                operatorId: currentUser?.id,
+                operatorName: currentUser?.name,
+                shiftId: activeShift?.id
+            });
+            // Update local state to reflect new counts immediately if needed
+            setActiveShift(shiftService.getCurrentShift());
         }
 
         return success;
@@ -388,12 +465,26 @@ export default function StandardInterface() {
                 loading={false}
             />
 
+            {/* Print History Modal (New) */}
+            <PrintHistoryModal
+                isOpen={isHistoryOpen}
+                onClose={() => setIsHistoryOpen(false)}
+                history={historyData.history}
+                currentUser={currentUser}
+                onUpdate={(entry) => historyData.updateHistoryEntry(entry, currentUser)}
+                onDelete={(id) => historyData.deleteHistoryEntry(id, currentUser)}
+                onReprint={handleReprint}
+            />
+
+            {/* Header */}
             {/* Header */}
             <Header
                 currentUser={currentUser}
                 onLogout={logout}
                 onSettingsClick={() => setIsSettingsOpen(true)}
                 onQueueClick={() => setIsQueueOpen(true)}
+                activeShift={activeShift}
+                onShiftClose={handleShiftCloseRequest}
                 printerData={printerData}
             />
 
@@ -519,6 +610,14 @@ export default function StandardInterface() {
             {/* Universal Sticky Footer Actions */}
             <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_-4px_rgba(0,0,0,0.15)]">
                 <div className="p-4 flex gap-3 md:gap-4 max-w-7xl mx-auto md:px-8">
+                    {/* History Button (New for Operator) */}
+                    <button
+                        onClick={() => setIsHistoryOpen(true)}
+                        className="flex-[1] flex items-center justify-center gap-2 py-3 md:py-4 px-4 bg-slate-100 text-slate-700 font-bold rounded-xl md:rounded-2xl hover:bg-slate-200 active:scale-95 transition-all text-sm md:text-lg border border-slate-200"
+                    >
+                        📜 <span className="hidden sm:inline">Історія</span>
+                    </button>
+
                     {/* Deferred Print Button */}
                     {/* Deferred Print Button - Always visible, disabled if invalid */}
                     <button
@@ -554,6 +653,100 @@ export default function StandardInterface() {
                     </button>
                 </div>
             </div>
+            {/* Shift Open Modal */}
+            {showShiftOpenModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center">
+                        <div className="text-4xl mb-4">👋</div>
+                        <h2 className="text-2xl font-bold text-slate-800 mb-2">Вітаємо, {currentUser?.name}!</h2>
+                        <p className="text-slate-500 mb-6">Для початку роботи необхідно відкрити нову зміну.</p>
+                        <button
+                            onClick={handleShiftOpen}
+                            className="w-full py-3 bg-[#115740] text-white font-bold rounded-xl hover:bg-[#0d4633] transition-colors text-lg"
+                        >
+                            Відкрити зміну
+                        </button>
+                    </div>
+                </div>
+            )}
+            {/* Shift Close Confirmation Modal */}
+            <ShiftCloseConfirmModal
+                isOpen={showShiftConfirmModal}
+                onClose={() => setShowShiftConfirmModal(false)}
+                onConfirm={confirmShiftClose}
+                currentShift={activeShift}
+            />
+
+            {/* Shift Close Summary Modal */}
+            {showShiftCloseModal && shiftCloseData && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+                        <div className="bg-[#115740] p-6 text-white text-center">
+                            <div className="text-4xl mb-2">✅</div>
+                            <h2 className="text-2xl font-bold">Зміна закрита!</h2>
+                            <p className="opacity-80">Звіт сформовано успішно</p>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-slate-50 p-3 rounded-xl border">
+                                    <div className="text-xs text-slate-500 uppercase font-bold text-center">Тривалість</div>
+                                    <div className="font-mono font-bold text-lg text-center">{shiftCloseData.summary.duration}</div>
+                                </div>
+                                <div className="bg-slate-50 p-3 rounded-xl border">
+                                    <div className="text-xs text-slate-500 uppercase font-bold text-center">Всього друків</div>
+                                    <div className="font-mono font-bold text-lg text-center">{shiftCloseData.summary.printCount}</div>
+                                </div>
+                            </div>
+
+                            {/* Email Status & Manual Download */}
+                            <div className={`p-4 rounded-xl border flex items-center gap-3 ${shiftCloseData.emailStatus?.success ? 'bg-emerald-50 border-emerald-100 text-emerald-700' : 'bg-amber-50 border-amber-100 text-amber-700'}`}>
+                                <div className="text-xl">{shiftCloseData.emailStatus?.success ? '📧' : '⚠️'}</div>
+                                <div className="flex-1">
+                                    <div className="text-sm font-bold uppercase tracking-tight">{shiftCloseData.emailStatus?.success ? 'Email відправлено' : 'Email не відправлено'}</div>
+                                    <div className="text-xs opacity-90">{shiftCloseData.emailStatus?.message}</div>
+                                </div>
+                                {shiftCloseData.file && (
+                                    <button
+                                        onClick={() => {
+                                            const url = URL.createObjectURL(shiftCloseData.file!);
+                                            const a = document.createElement('a');
+                                            a.href = url;
+                                            a.download = shiftCloseData.file!.name;
+                                            a.click();
+                                        }}
+                                        className="bg-white shadow-sm border border-slate-200 p-2 rounded-lg hover:bg-slate-50 transition-colors"
+                                        title="Завантажити звіт вручну"
+                                    >
+                                        📥
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="border-t pt-2">
+                                <h3 className="font-bold text-slate-700 mb-2 text-xs uppercase tracking-wider text-slate-400">Топ продукції</h3>
+                                <div className="space-y-1.5">
+                                    {shiftCloseData.summary.topProducts.map((p, i) => (
+                                        <div key={i} className="flex justify-between text-sm">
+                                            <span className="text-slate-600 truncate flex-1 mr-2">{p.name}</span>
+                                            <span className="font-bold font-mono text-slate-800">{p.count}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={() => {
+                                    setShowShiftCloseModal(false);
+                                    logout();
+                                }}
+                                className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-900 shadow-lg shadow-slate-900/20 transition-colors mt-2 text-lg"
+                            >
+                                Завершити роботу
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

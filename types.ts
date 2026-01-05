@@ -31,6 +31,9 @@ export interface LabelData {
   barcode?: string; // EXACT generated barcode string
   timestamp?: string;
   status?: 'ok' | 'error' | 'cancelled' | 'deferred';
+  operatorId?: string; // Track who printed this
+  operatorName?: string; // For reports
+  shiftId?: string; // Optional link to shift
   // Deprecated: sort?: string;
 }
 

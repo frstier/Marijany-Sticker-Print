@@ -696,6 +696,49 @@ export default function AdminInterface() {
                                 </button>
                             </div>
 
+                            {/* Email Settings */}
+                            <div className="pt-6 border-t">
+                                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">📧 Налаштування Email (Звіти)</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 uppercase">ID Сервісу (Service ID)</label>
+                                        <input
+                                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm mt-1"
+                                            defaultValue={localStorage.getItem('emailjs_service_id') || ''}
+                                            onChange={e => localStorage.setItem('emailjs_service_id', e.target.value)}
+                                            placeholder="service_..."
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 uppercase">ID Шаблону (Template ID)</label>
+                                        <input
+                                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm mt-1"
+                                            defaultValue={localStorage.getItem('emailjs_template_id') || ''}
+                                            onChange={e => localStorage.setItem('emailjs_template_id', e.target.value)}
+                                            placeholder="template_..."
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 uppercase">Публічний ключ (Public Key)</label>
+                                        <input
+                                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm mt-1"
+                                            defaultValue={localStorage.getItem('emailjs_public_key') || ''}
+                                            onChange={e => localStorage.setItem('emailjs_public_key', e.target.value)}
+                                            placeholder="public_key"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 uppercase">Email Отримувача (За замовчуванням)</label>
+                                        <input
+                                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm mt-1"
+                                            defaultValue={localStorage.getItem('zebra_report_email_v1') || ''}
+                                            onChange={e => localStorage.setItem('zebra_report_email_v1', e.target.value)}
+                                            placeholder="report@example.com"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Admin Tools */}
                             <div className="pt-6 border-t">
                                 <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">🛠️ Інструменти</h3>

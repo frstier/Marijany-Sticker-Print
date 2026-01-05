@@ -8,6 +8,9 @@ interface HeaderProps {
     // New Props from App.tsx
     onSettingsClick: () => void;
     onQueueClick?: () => void; // Optional: If provided, show Queue button
+    // New Props for Shift
+    activeShift?: { startTime: number; printCount: number } | null;
+    onShiftClose?: () => void;
     printerData: any; // Contains printerStatus
 }
 
@@ -16,6 +19,8 @@ const Header: React.FC<HeaderProps> = ({
     onLogout,
     onSettingsClick,
     onQueueClick,
+    activeShift,
+    onShiftClose,
     printerData
 }) => {
     // Logout Confirmation State
@@ -65,6 +70,18 @@ const Header: React.FC<HeaderProps> = ({
                     >
                         {logoutConfirm ? 'Підтвердити?' : 'Вихід'}
                     </button>
+
+                    {/* Active Shift Indicator */}
+                    {activeShift && onShiftClose && (
+                        <button
+                            onClick={onShiftClose}
+                            className="hidden md:flex items-center gap-2 px-3 py-1 bg-emerald-500/20 text-emerald-100 rounded-lg border border-emerald-500/30 hover:bg-emerald-500/30 transition-all font-mono text-xs"
+                            title="Закрити зміну"
+                        >
+                            <span>🕒 {new Date(activeShift.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span className="bg-emerald-500 text-white px-1.5 rounded-md font-bold">{activeShift.printCount}</span>
+                        </button>
+                    )}
 
                     {/* Status Indicator (Bulb) */}
                     <div

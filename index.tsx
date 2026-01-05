@@ -33,53 +33,7 @@ window.addEventListener('unhandledrejection', (event) => {
   `;
 });
 
-// --- REMOTE DEBUGGING: ON-SCREEN CONSOLE ---
-if (import.meta.env.PROD || true) { // Force enable for debugging
-  const logDiv = document.createElement('div');
-  logDiv.style.cssText = `
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 200px;
-    background: rgba(0,0,0,0.8);
-    color: #0f0;
-    font-family: monospace;
-    font-size: 10px;
-    overflow: auto;
-    z-index: 10000;
-    padding: 10px;
-    pointer-events: none;
-  `;
-  document.body.appendChild(logDiv);
 
-  const originalLog = console.log;
-  const originalError = console.error;
-  const originalWarn = console.warn;
-
-  const appendLog = (type: string, args: any[]) => {
-    const msg = args.map(a => {
-      try {
-        return typeof a === 'object' ? JSON.stringify(a) : String(a);
-      } catch (e) {
-        return String(a);
-      }
-    }).join(' ');
-
-    const line = document.createElement('div');
-    line.textContent = `[${type}] ${msg}`;
-    line.style.borderBottom = '1px solid #333';
-    if (type === 'ERROR') line.style.color = '#ff6b6b';
-    if (type === 'WARN') line.style.color = '#feca57';
-    logDiv.appendChild(line);
-    logDiv.scrollTop = logDiv.scrollHeight;
-  };
-
-  console.log = (...args) => { originalLog(...args); appendLog('LOG', args); };
-  console.error = (...args) => { originalError(...args); appendLog('ERROR', args); };
-  console.warn = (...args) => { originalWarn(...args); appendLog('WARN', args); };
-}
-// -------------------------------------------
 
 import { AuthProvider } from './hooks/useAuth';
 

@@ -24,8 +24,11 @@
     "@supabase/supabase-js": "^2.87.1",
     "capacitor-plugin-safe-area": "^4.0.3",
     "capacitor-zebra-printer": "^0.2.0",
+    "chart.js": "^4.5.1",
+    "html5-qrcode": "^2.3.8",
     "jsbarcode": "3.11.6",
     "react": "^19.2.1",
+    "react-chartjs-2": "^5.3.1",
     "react-dom": "^19.2.1",
     "xlsx": "^0.18.5"
   },
@@ -44,6 +47,7 @@
     "tailwindcss": "^3.4.17",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
+    "vite-plugin-pwa": "^1.2.0",
     "vitest": "^4.0.15"
   }
 }

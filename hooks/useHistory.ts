@@ -160,6 +160,7 @@ export function useHistory() {
                 "№": item.serialNumber,
                 "Сорт/Фракція": item.sortValue || "",
                 "Вага (кг)": Number(item.weight),
+                "Штрих-код": item.barcode || "",
                 "Статус": statusLabel
             };
         });
@@ -343,8 +344,7 @@ export function useHistory() {
                 serialNumber: Math.floor(Math.random() * 1000) + 1000,
                 sortLabel: Math.random() > 0.5 ? '1 Сорт' : '2 Сорт',
                 sortValue: '1',
-                status: 'ok',
-                synced: false
+                status: 'ok'
             };
             await addToHistory(entry);
         }

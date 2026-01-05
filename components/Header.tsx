@@ -1,5 +1,5 @@
 import React from 'react';
-import { ExternalLinkIcon, SettingsIcon } from './Icons';
+import { ExternalLinkIcon, SettingsIcon, QueueListIcon } from './Icons';
 import { PrinterStatus, User } from '../types';
 
 interface HeaderProps {
@@ -7,6 +7,7 @@ interface HeaderProps {
     onLogout: () => void;
     // New Props from App.tsx
     onSettingsClick: () => void;
+    onQueueClick?: () => void; // Optional: If provided, show Queue button
     printerData: any; // Contains printerStatus
 }
 
@@ -14,10 +15,24 @@ const Header: React.FC<HeaderProps> = ({
     currentUser,
     onLogout,
     onSettingsClick,
+    onQueueClick,
     printerData
 }) => {
+    // Logout Confirmation State
+    const [logoutConfirm, setLogoutConfirm] = React.useState(false);
+
+    const handleLogoutClick = () => {
+        if (logoutConfirm) {
+            onLogout();
+        } else {
+            setLogoutConfirm(true);
+            setTimeout(() => setLogoutConfirm(false), 3000);
+        }
+    };
+
     // Extract status from data object
     const printerStatus = printerData?.printerStatus || PrinterStatus.DISCONNECTED;
+
     return (
         <header className="bg-[#115740] border-b border-[#0f4433] sticky top-0 z-30 shadow-md" style={{ paddingTop: 'var(--safe-area-top, 0px)' }}>
             <div className="max-w-7xl mx-auto px-3 h-14 md:h-16 flex items-center justify-between">
@@ -27,7 +42,8 @@ const Header: React.FC<HeaderProps> = ({
                         <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
                     </div>
                     <div>
-                        <h1 className="text-lg md:text-xl font-bold text-white leading-none tracking-tight">Marijany Sticker Print</h1>
+                        <h1 className="text-lg md:text-xl font-bold text-white leading-none tracking-tight">HeMP</h1>
+                        <p className="text-[10px] text-emerald-200 font-medium tracking-widest opacity-80 leading-none mt-0.5">HEIGHT MAIN PROGRAM</p>
                         <div className="flex items-center gap-1">
                             {/* New Window Warning Hint */}
                             {typeof window !== 'undefined' && window.self !== window.top && (
@@ -42,10 +58,12 @@ const Header: React.FC<HeaderProps> = ({
                 <div className="flex items-center gap-3">
                     {/* Logout Button */}
                     <button
-                        onClick={onLogout}
-                        className="text-white/60 hover:text-white text-xs font-medium transition-colors"
+                        onClick={handleLogoutClick}
+                        className={`text-xs font-medium transition-all px-3 py-1 rounded-lg ${logoutConfirm
+                            ? 'bg-red-500 text-white animate-pulse font-bold'
+                            : 'text-white/60 hover:text-white'}`}
                     >
-                        Вийти
+                        {logoutConfirm ? 'Підтвердити?' : 'Вихід'}
                     </button>
 
                     {/* Status Indicator (Bulb) */}
@@ -55,6 +73,17 @@ const Header: React.FC<HeaderProps> = ({
                             }`}
                         title={printerStatus === PrinterStatus.CONNECTED ? "Підключено" : "Немає з'єднання"}
                     />
+
+                    {/* Queue Button (if handler provided) */}
+                    {onQueueClick && (
+                        <button
+                            onClick={onQueueClick}
+                            className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-all active:scale-95 border border-white/10 relative"
+                            title="Черга друку"
+                        >
+                            <QueueListIcon />
+                        </button>
+                    )}
 
                     {/* Settings Button */}
                     <button

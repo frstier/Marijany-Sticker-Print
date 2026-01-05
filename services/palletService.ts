@@ -127,6 +127,20 @@ export const PalletService = {
         return batches[batchIndex];
     },
 
+    disbandBatch(batchId: string): BatchItem[] {
+        const batches = this.getBatches();
+        const batchIndex = batches.findIndex(b => b.id === batchId);
+        if (batchIndex === -1) throw new Error("Batch not found");
+
+        const itemsToReturn = [...batches[batchIndex].items];
+
+        // Remove batch from list
+        batches.splice(batchIndex, 1);
+        this.saveBatches(batches);
+
+        return itemsToReturn;
+    },
+
     // --- Helpers ---
 
     // Parse Barcode: Expecting our ZPL format if possible, or we need to standardize it.

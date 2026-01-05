@@ -1,16 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useDeferredValue, memo } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { ProductionService } from '../../services/productionService';
 import { ProductionItem } from '../../types/production';
+import { utils, write } from 'xlsx';
 
 export default function LabInterface() {
     const { logout, currentUser } = useAuth();
 
     // State
     const [pendingItems, setPendingItems] = useState<ProductionItem[]>([]);
+    const [gradedItems, setGradedItems] = useState<ProductionItem[]>([]);
     const [selectedItem, setSelectedItem] = useState<ProductionItem | null>(null);
     const [selectedSort, setSelectedSort] = useState<string>('');
     const [searchQuery, setSearchQuery] = useState('');
+    const deferredSearchQuery = useDeferredValue(searchQuery);
+
+    // Multi-select for batch grading
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [batchMode, setBatchMode] = useState(false);
+
+    // Report modal
+    const [showReport, setShowReport] = useState(false);
+    const [reportEmail, setReportEmail] = useState(() => localStorage.getItem('lab_report_email') || '');
+    const [emailSending, setEmailSending] = useState(false);
 
     // Mock Sorts -> Now Dynamic
     // const sorts = ['1 Сорт', '2 Сорт', '3 Сорт', 'Нестандарт', 'Сміття'];
@@ -46,9 +58,91 @@ export default function LabInterface() {
         }
     };
 
+    const loadGradedItems = async () => {
+        try {
+            const items = await ProductionService.getGradedItems();
+            setGradedItems(items);
+        } catch (e) {
+            console.error("Failed to load graded items", e);
+        }
+    };
+
     useEffect(() => {
         loadData();
     }, []);
+
+    // Report handlers
+    const handleOpenReport = () => {
+        loadGradedItems();
+        setShowReport(true);
+    };
+
+    const handleDownloadXLSX = () => {
+        const data = gradedItems.map(item => ({
+            '№': item.serialNumber,
+            'Продукт': item.productName,
+            'Сорт': item.sort || '',
+            'Вага': item.weight,
+            'Дата': item.date,
+            'Штрих-код': item.barcode
+        }));
+        const ws = utils.json_to_sheet(data);
+        const wb = utils.book_new();
+        utils.book_append_sheet(wb, ws, 'Звіт');
+        const buf = write(wb, { type: 'array', bookType: 'xlsx' });
+        const blob = new Blob([buf], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Звіт_Лабораторії_${new Date().toLocaleDateString('uk-UA')}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const generateReportSummary = () => {
+        const sortCounts: Record<string, { count: number; weight: number }> = {};
+        gradedItems.forEach(item => {
+            const sort = item.sort || 'Без сорту';
+            if (!sortCounts[sort]) sortCounts[sort] = { count: 0, weight: 0 };
+            sortCounts[sort].count++;
+            sortCounts[sort].weight += item.weight;
+        });
+
+        let summary = `Звіт лабораторії за ${new Date().toLocaleDateString('uk-UA')}\n\n`;
+        summary += `Всього перевірено: ${gradedItems.length} бейлів\n\n`;
+        summary += `За сортами:\n`;
+        Object.entries(sortCounts).forEach(([sort, data]) => {
+            summary += `  ${sort}: ${data.count} шт. (${data.weight.toFixed(1)} кг)\n`;
+        });
+        summary += `\nЗагальна вага: ${gradedItems.reduce((sum, i) => sum + i.weight, 0).toFixed(1)} кг`;
+        return summary;
+    };
+
+    const handleSendEmail = async () => {
+        if (!reportEmail) return;
+        setEmailSending(true);
+        localStorage.setItem('lab_report_email', reportEmail);
+
+        try {
+            const subject = `Звіт лабораторії ${new Date().toLocaleDateString('uk-UA')}`;
+            const body = generateReportSummary();
+            window.location.href = `mailto:${reportEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        } catch (e) {
+            console.error(e);
+        }
+        setEmailSending(false);
+    };
+
+    const handleRevertGrade = async (item: ProductionItem) => {
+        if (!window.confirm(`Повернути бейл №${item.serialNumber} на перевірку?`)) return;
+        try {
+            await ProductionService.revertGrade(item.id);
+            loadGradedItems(); // Refresh report list
+            loadData(); // Refresh main list
+        } catch (e) {
+            console.error("Failed to revert grade", e);
+        }
+    };
 
     // Handlers
     const handleGrade = async () => {
@@ -60,14 +154,62 @@ export default function LabInterface() {
             setSelectedSort('');
         } catch (e) {
             console.error(e);
-            alert("Помилка збереження");
+        }
+    };
+
+    // Batch grading functions
+    const toggleItemSelect = (id: string) => {
+        const newSet = new Set(selectedIds);
+        if (newSet.has(id)) {
+            newSet.delete(id);
+        } else {
+            newSet.add(id);
+        }
+        setSelectedIds(newSet);
+    };
+
+    const selectAll = () => {
+        if (selectedIds.size === filteredItems.length) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(filteredItems.map(i => i.id)));
+        }
+    };
+
+    const handleBatchGrade = async () => {
+        if (selectedIds.size === 0 || !selectedSort) return;
+        try {
+            await Promise.all(
+                Array.from(selectedIds).map((id: string) =>
+                    ProductionService.gradeItem(id, selectedSort, currentUser?.id || 'unknown')
+                )
+            );
+            // Refresh list
+            loadData();
+            setSelectedIds(new Set());
+            setSelectedSort('');
+            setBatchMode(false);
+        } catch (e) {
+            console.error(e);
         }
     };
 
     const filteredItems = pendingItems.filter(item =>
-        item.serialNumber.toString().includes(searchQuery) ||
-        item.barcode.includes(searchQuery)
+        item.serialNumber.toString().includes(deferredSearchQuery) ||
+        item.barcode.includes(deferredSearchQuery)
     );
+
+    // Logout State (Local)
+    const [logoutConfirm, setLogoutConfirm] = useState(false);
+
+    const handleLogoutClick = () => {
+        if (logoutConfirm) {
+            logout();
+        } else {
+            setLogoutConfirm(true);
+            setTimeout(() => setLogoutConfirm(false), 3000);
+        }
+    };
 
     return (
         <div className="flex flex-col h-screen bg-slate-100 font-sans">
@@ -77,16 +219,24 @@ export default function LabInterface() {
                     <div className="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center font-bold text-white shadow-inner">L</div>
                     <div>
                         <div className="font-bold text-lg leading-tight">ЛАБОРАТОРІЯ</div>
-                        <div className="text-[10px] text-purple-200 tracking-wider">MARIJANY QC</div>
+                        <div className="text-[10px] text-purple-200 tracking-wider">HeMP QC</div>
                     </div>
                 </div>
                 <div className="flex items-center gap-4">
                     <span className="opacity-80 text-sm hidden md:inline">{currentUser?.name}</span>
                     <button
-                        onClick={logout}
-                        className="bg-purple-800 hover:bg-purple-700 px-4 py-2 rounded text-sm transition-colors border border-purple-600"
+                        onClick={handleOpenReport}
+                        className="px-4 py-2 rounded text-sm font-bold bg-purple-600 hover:bg-purple-500 border border-purple-400 transition-all"
                     >
-                        Вийти
+                        📊 Звіти
+                    </button>
+                    <button
+                        onClick={handleLogoutClick}
+                        className={`px-4 py-2 rounded text-sm transition-all font-bold border ${logoutConfirm
+                            ? 'bg-red-500 text-white border-red-400 animate-pulse'
+                            : 'bg-purple-800 hover:bg-purple-700 border-purple-600'}`}
+                    >
+                        {logoutConfirm ? 'Підтвердити?' : 'Вийти'}
                     </button>
                 </div>
             </div>
@@ -97,13 +247,45 @@ export default function LabInterface() {
                 {/* LEFT: List */}
                 <div className="w-full md:w-1/3 bg-white border-r border-slate-200 flex flex-col">
                     <div className="p-4 border-b border-slate-100 bg-slate-50">
-                        <h2 className="text-lg font-bold text-slate-800 mb-2">На Перевірку <span className="text-purple-600">({pendingItems.length})</span></h2>
+                        <div className="flex justify-between items-center mb-2">
+                            <h2 className="text-lg font-bold text-slate-800">На Перевірку <span className="text-purple-600">({pendingItems.length})</span></h2>
+                            <button
+                                onClick={() => {
+                                    setBatchMode(!batchMode);
+                                    if (!batchMode) {
+                                        setSelectedItem(null);
+                                    } else {
+                                        setSelectedIds(new Set());
+                                    }
+                                }}
+                                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${batchMode
+                                    ? 'bg-purple-600 text-white'
+                                    : 'bg-slate-200 text-slate-600 hover:bg-purple-100'
+                                    }`}
+                            >
+                                {batchMode ? '☑️ Пакетний' : '🔲 Пакетний'}
+                            </button>
+                        </div>
                         <input
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             placeholder="Пошук по №..."
                             className="w-full p-2 rounded-lg border border-slate-300 focus:border-purple-500 text-sm"
                         />
+                        {/* Select All in batch mode */}
+                        {batchMode && filteredItems.length > 0 && (
+                            <div className="mt-2 flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    checked={selectedIds.size === filteredItems.length && filteredItems.length > 0}
+                                    onChange={selectAll}
+                                    className="w-7 h-7 accent-purple-600 cursor-pointer"
+                                />
+                                <span className="text-sm text-slate-600">
+                                    Обрати всі ({selectedIds.size} / {filteredItems.length})
+                                </span>
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex-1 overflow-y-auto">
@@ -113,16 +295,30 @@ export default function LabInterface() {
                             filteredItems.map(item => (
                                 <div
                                     key={item.id}
-                                    onClick={() => setSelectedItem(item)}
-                                    className={`p-4 border-b border-slate-100 cursor-pointer transition-colors hover:bg-slate-50 ${selectedItem?.id === item.id ? 'bg-purple-50 border-l-4 border-l-purple-600' : ''}`}
+                                    onClick={() => batchMode ? toggleItemSelect(item.id) : setSelectedItem(item)}
+                                    className={`p-4 border-b border-slate-100 cursor-pointer transition-colors hover:bg-slate-50 flex items-center gap-3 ${batchMode
+                                        ? (selectedIds.has(item.id) ? 'bg-purple-50 border-l-4 border-l-purple-600' : '')
+                                        : (selectedItem?.id === item.id ? 'bg-purple-50 border-l-4 border-l-purple-600' : '')
+                                        }`}
                                 >
-                                    <div className="flex justify-between items-center mb-1">
-                                        <div className="font-bold text-slate-800">№ {item.serialNumber}</div>
-                                        <div className="text-xs font-mono text-slate-500 bg-slate-100 px-2 rounded">{item.weight} кг</div>
-                                    </div>
-                                    <div className="flex justify-between items-end">
-                                        <div className="text-xs text-slate-500">{item.productName} | {item.date}</div>
-                                        <div className="text-[10px] uppercase text-purple-400 font-bold tracking-wider">Pending</div>
+                                    {batchMode && (
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedIds.has(item.id)}
+                                            onChange={() => toggleItemSelect(item.id)}
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="w-7 h-7 accent-purple-600 shrink-0 cursor-pointer"
+                                        />
+                                    )}
+                                    <div className="flex-1">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <div className="font-bold text-slate-800">№ {item.serialNumber}</div>
+                                            <div className="text-xs font-mono text-slate-500 bg-slate-100 px-2 rounded">{item.weight} кг</div>
+                                        </div>
+                                        <div className="flex justify-between items-end">
+                                            <div className="text-xs text-slate-500">{item.productName} | {item.date}</div>
+                                            <div className="text-[10px] uppercase text-purple-400 font-bold tracking-wider">Pending</div>
+                                        </div>
                                     </div>
                                 </div>
                             ))
@@ -132,10 +328,62 @@ export default function LabInterface() {
 
                 {/* RIGHT: Detail & Action */}
                 <div className="flex-1 bg-slate-50 flex flex-col items-center justify-center p-6">
-                    {!selectedItem ? (
+                    {batchMode ? (
+                        // Batch Mode Panel
+                        <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden animate-fade-in">
+                            <div className="bg-purple-50 p-6 border-b border-purple-100">
+                                <div className="text-xs font-bold text-purple-600 uppercase mb-1">Пакетне Сортування</div>
+                                <div className="text-3xl font-bold text-slate-800">
+                                    Обрано: {selectedIds.size} бейлів
+                                </div>
+                            </div>
+
+                            {selectedIds.size === 0 ? (
+                                <div className="p-8 text-center text-slate-400">
+                                    <div className="text-6xl mb-4">☑️</div>
+                                    <p>Оберіть бейли зі списку зліва для пакетного сортування</p>
+                                </div>
+                            ) : (
+                                <div className="p-8">
+                                    <label className="block text-center text-sm font-bold text-slate-500 mb-4 uppercase tracking-widest">
+                                        Оберіть Якість для всіх обраних
+                                    </label>
+
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+                                        {['1', '2', '3', '4', 'Нестандарт'].map(sort => (
+                                            <button
+                                                key={sort}
+                                                onClick={() => setSelectedSort(sort)}
+                                                className={`p-4 rounded-xl font-bold transition-all text-sm md:text-base ${selectedSort === sort
+                                                    ? 'bg-purple-600 text-white shadow-lg scale-105'
+                                                    : 'bg-white border-2 border-slate-100 text-slate-600 hover:border-purple-300'
+                                                    }`}
+                                            >
+                                                {sort}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    <button
+                                        onClick={handleBatchGrade}
+                                        disabled={!selectedSort}
+                                        className={`w-full py-4 rounded-xl font-bold text-xl shadow-xl transition-all flex items-center justify-center gap-3 ${selectedSort
+                                            ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-900/20 active:scale-95'
+                                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                            }`}
+                                    >
+                                        <span>СОРТУВАТИ {selectedIds.size} БЕЙЛІВ</span>
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    ) : !selectedItem ? (
                         <div className="text-center text-slate-400 max-w-sm">
                             <div className="text-6xl mb-4">👈</div>
-                            <h3 className="text-xl font-bold mb-2">Оберіть тюк зі списку</h3>
+                            <h3 className="text-xl font-bold mb-2">Оберіть бейл зі списку</h3>
                             <p>Натисніть на запис зліва, щоб провести експертизу та присвоїти сорт.</p>
                         </div>
                     ) : (
@@ -143,7 +391,7 @@ export default function LabInterface() {
                             <div className="bg-purple-50 p-6 border-b border-purple-100">
                                 <div className="flex justify-between items-start">
                                     <div>
-                                        <div className="text-xs font-bold text-purple-600 uppercase mb-1">Обраний Тюк</div>
+                                        <div className="text-xs font-bold text-purple-600 uppercase mb-1">Обраний Бейл</div>
                                         <div className="text-3xl font-bold text-slate-800">№ {selectedItem.serialNumber}</div>
                                     </div>
                                     <div className="text-right">
@@ -151,12 +399,9 @@ export default function LabInterface() {
                                     </div>
                                 </div>
 
-                                {/* Product Description Block */}
                                 <div className="mt-4 bg-white p-3 rounded-xl border border-purple-100 shadow-sm">
                                     <div className="text-xs text-slate-400 uppercase tracking-widest font-bold mb-1">Продукт</div>
                                     <div className="text-xl font-bold text-slate-800 leading-none">{selectedItem.productName}</div>
-                                    {/* Try to find English name from constants if possible, logic or lookup needed if we only have name */}
-                                    {/* Ideally we'd map it. Since we don't have direct access here easily without import... let's trust the name is good enough or import PRODUCTS */}
                                 </div>
 
                                 <div className="mt-2 text-[10px] font-mono text-slate-400 text-center">
@@ -201,6 +446,115 @@ export default function LabInterface() {
                 </div>
 
             </div>
+
+            {/* Report Modal */}
+            {showReport && (
+                <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+                        {/* Header */}
+                        <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-6 flex justify-between items-center shrink-0">
+                            <div>
+                                <h2 className="text-2xl font-bold">Звіт Лабораторії</h2>
+                                <p className="text-sm opacity-80">Перевірені бейли за сортами</p>
+                            </div>
+                            <button onClick={() => setShowReport(false)} className="text-white/70 hover:text-white text-3xl">×</button>
+                        </div>
+
+                        {/* Summary */}
+                        <div className="p-4 bg-purple-50 border-b border-purple-100 grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="text-center">
+                                <div className="text-3xl font-bold text-purple-700">{gradedItems.length}</div>
+                                <div className="text-xs text-purple-500">Всього бейлів</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-3xl font-bold text-green-600">{gradedItems.reduce((sum, i) => sum + i.weight, 0).toFixed(1)}</div>
+                                <div className="text-xs text-green-500">Вага (кг)</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-3xl font-bold text-blue-600">{[...new Set(gradedItems.map(i => i.sort))].length}</div>
+                                <div className="text-xs text-blue-500">Сортів</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-3xl font-bold text-orange-600">{[...new Set(gradedItems.map(i => i.productName))].length}</div>
+                                <div className="text-xs text-orange-500">Продуктів</div>
+                            </div>
+                        </div>
+
+                        {/* Email */}
+                        <div className="p-4 bg-white border-b border-slate-200 flex gap-3 items-center">
+                            <input
+                                type="email"
+                                value={reportEmail}
+                                onChange={(e) => setReportEmail(e.target.value)}
+                                placeholder="Email для звіту..."
+                                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg"
+                            />
+                            <button
+                                onClick={handleSendEmail}
+                                disabled={!reportEmail || emailSending}
+                                className="px-4 py-2 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 disabled:bg-slate-300"
+                            >
+                                📧 Надіслати
+                            </button>
+                            <button
+                                onClick={handleDownloadXLSX}
+                                className="px-4 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700"
+                            >
+                                📥 XLSX
+                            </button>
+                        </div>
+
+                        {/* List */}
+                        <div className="flex-1 overflow-y-auto p-4">
+                            {gradedItems.length === 0 ? (
+                                <div className="text-center py-16 text-slate-400">
+                                    <div className="text-6xl mb-4">📋</div>
+                                    <p>Немає перевірених бейлів</p>
+                                </div>
+                            ) : (
+                                <table className="w-full text-sm">
+                                    <thead className="bg-slate-100 sticky top-0">
+                                        <tr>
+                                            <th className="p-2 text-left">№</th>
+                                            <th className="p-2 text-left">Продукт</th>
+                                            <th className="p-2 text-left">Сорт</th>
+                                            <th className="p-2 text-right">Вага</th>
+                                            <th className="p-2 text-left">Дата</th>
+                                            <th className="p-2 text-left">Штрих-код</th>
+                                            <th className="p-2 text-right">Дії</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {gradedItems.map(item => (
+                                            <tr key={item.id} className="hover:bg-slate-50">
+                                                <td className="p-2 font-mono font-bold">{item.serialNumber}</td>
+                                                <td className="p-2">{item.productName}</td>
+                                                <td className="p-2">
+                                                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-bold">
+                                                        {item.sort}
+                                                    </span>
+                                                </td>
+                                                <td className="p-2 text-right font-mono">{item.weight} кг</td>
+                                                <td className="p-2 text-slate-500">{item.date}</td>
+                                                <td className="p-2 font-mono text-xs text-slate-400">{item.barcode}</td>
+                                                <td className="p-2 text-right">
+                                                    <button
+                                                        onClick={() => handleRevertGrade(item)}
+                                                        className="px-3 py-1 bg-slate-200 hover:bg-red-100 text-slate-700 hover:text-red-600 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 ml-auto"
+                                                        title="Повернути на перевірку"
+                                                    >
+                                                        <span>↩️</span> Скасувати
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

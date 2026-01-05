@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import { PalletService } from '../../services/palletService';
 import { Batch, BatchItem } from '../../types/pallet';
 import { zebraService } from '../../services/zebraService';
@@ -6,6 +6,7 @@ import { usePrinter } from '../../hooks/usePrinter';
 import Keypad from '../Keypad';
 import { ProductionService } from '../../services/productionService';
 import { ProductionItem } from '../../types/production';
+import { PRODUCTS } from '../../constants';
 
 interface PalletBuilderProps {
     onClose: () => void;
@@ -20,6 +21,10 @@ export default function PalletBuilder({ onClose }: PalletBuilderProps) {
     // ID Editing State
     const [isEditingId, setIsEditingId] = useState(false);
     const [tempId, setTempId] = useState('');
+
+    // Filters for pallet formation
+    const [selectedProduct, setSelectedProduct] = useState<string>('');
+    const [selectedSort, setSelectedSort] = useState<string>('');
 
     const scanInputRef = useRef<HTMLInputElement>(null);
     const printerData = usePrinter();
@@ -46,14 +51,22 @@ export default function PalletBuilder({ onClose }: PalletBuilderProps) {
     }, [currentBatch]);
 
     const handleStartBatch = () => {
-        // Auto-start with "Auto" sort or mixed.
-        const newBatch = PalletService.createBatch("Auto");
+        // Start batch with selected sort
+        const newBatch = PalletService.createBatch(selectedSort || "Auto");
         setCurrentBatch(newBatch);
         setError('');
     };
 
     const handleAddFromStock = (item: ProductionItem) => {
         if (!currentBatch) return;
+
+        // Enforce 20-item limit
+        const MAX_ITEMS = 20;
+        if (currentBatch.items.length >= MAX_ITEMS) {
+            setError(`Максимум ${MAX_ITEMS} бейлів на палету!`);
+            return;
+        }
+
         try {
             // Check duplicates in current batch (though UI should prevent it by removing from list)
             if (currentBatch.items.some(i => i.serialNumber === item.serialNumber)) {
@@ -65,7 +78,8 @@ export default function PalletBuilder({ onClose }: PalletBuilderProps) {
                 weight: item.weight,
                 productName: item.productName,
                 sort: item.sort || 'Unknown',
-                date: item.date
+                date: item.date,
+                productionItemId: item.id // Link to ProductionItem for status updates
             };
 
             const updated = PalletService.addItemToBatch(currentBatch.id, batchItem);
@@ -182,6 +196,15 @@ export default function PalletBuilder({ onClose }: PalletBuilderProps) {
             return;
         }
 
+        // Update ProductionItems with batchId and status = 'palletized'
+        const itemIds = currentBatch.items
+            .map(i => i.productionItemId)
+            .filter((id): id is string => !!id);
+
+        if (itemIds.length > 0) {
+            await ProductionService.palletizeItems(itemIds, currentBatch.id);
+        }
+
         // Close Batch
         PalletService.closeBatch(currentBatch.id);
 
@@ -256,9 +279,25 @@ export default function PalletBuilder({ onClose }: PalletBuilderProps) {
 
     if (!currentBatch) {
         const nextId = PalletService.getNextBatchNumber();
+        const MIN_ITEMS = 12;
+        const MAX_ITEMS = 20;
+
+        // Get unique products and sorts from available items
+        const uniqueProducts = [...new Set(availableItems.map(i => i.productName))];
+        const uniqueSorts = [...new Set(availableItems.map(i => i.sort).filter(Boolean))];
+
+        // Filter items based on selection
+        const filteredItems = availableItems.filter(item => {
+            if (selectedProduct && item.productName !== selectedProduct) return false;
+            if (selectedSort && item.sort !== selectedSort) return false;
+            return true;
+        });
+
+        const canStart = selectedProduct && selectedSort &&
+            filteredItems.length >= MIN_ITEMS && filteredItems.length <= MAX_ITEMS;
 
         return (
-            <div className="bg-white p-8 rounded-2xl shadow-xl max-w-2xl w-full mx-auto space-y-6 animate-fade-in h-[60vh] flex flex-col">
+            <div className="bg-white p-8 rounded-2xl shadow-xl max-w-2xl w-full mx-auto space-y-6 animate-fade-in max-h-[80vh] flex flex-col overflow-auto">
                 <div className="flex justify-between items-center border-b pb-4">
                     <h2 className="text-2xl font-bold text-slate-800">Формування Палети</h2>
                     <div className="flex flex-col items-end">
@@ -267,12 +306,68 @@ export default function PalletBuilder({ onClose }: PalletBuilderProps) {
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-hidden flex flex-col bg-slate-50 rounded-xl p-4 border border-slate-200 text-center items-center justify-center space-y-4">
-                    <div className="text-6xl text-blue-200">📦</div>
-                    <div>
-                        <p className="text-lg font-medium text-slate-700">Готові до формування палети</p>
-                        <p className="text-sm text-slate-500">На складі доступно: <strong className="text-slate-800">{availableItems.length}</strong> тюків</p>
+                {/* Product Selection */}
+                <div className="space-y-3">
+                    <label className="block text-sm font-bold text-slate-700">1. Виберіть Продукцію</label>
+                    <div className="grid grid-cols-3 gap-2">
+                        {uniqueProducts.map(product => (
+                            <button
+                                key={product}
+                                onClick={() => setSelectedProduct(product)}
+                                className={`py-3 px-4 rounded-xl text-sm font-medium transition-all ${selectedProduct === product
+                                    ? 'bg-blue-600 text-white shadow-lg'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                    }`}
+                            >
+                                {product}
+                            </button>
+                        ))}
                     </div>
+                </div>
+
+                {/* Sort Selection */}
+                <div className="space-y-3">
+                    <label className="block text-sm font-bold text-slate-700">2. Виберіть Сорт</label>
+                    <div className="grid grid-cols-3 gap-2">
+                        {uniqueSorts.map(sort => (
+                            <button
+                                key={sort}
+                                onClick={() => setSelectedSort(sort || '')}
+                                className={`py-3 px-4 rounded-xl text-sm font-medium transition-all ${selectedSort === sort
+                                    ? 'bg-purple-600 text-white shadow-lg'
+                                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                    }`}
+                            >
+                                {sort}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Status */}
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <p className="text-sm text-slate-500">Обрано:</p>
+                            <p className="font-bold text-slate-800">
+                                {selectedProduct || '—'} / {selectedSort || '—'}
+                            </p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-sm text-slate-500">Доступно бейлів:</p>
+                            <p className={`text-2xl font-bold ${filteredItems.length >= MIN_ITEMS && filteredItems.length <= MAX_ITEMS
+                                ? 'text-green-600'
+                                : 'text-orange-500'
+                                }`}>
+                                {filteredItems.length}
+                            </p>
+                        </div>
+                    </div>
+                    {selectedProduct && selectedSort && (filteredItems.length < MIN_ITEMS || filteredItems.length > MAX_ITEMS) && (
+                        <p className="text-xs text-orange-500 mt-2">
+                            ⚠️ Потрібно від {MIN_ITEMS} до {MAX_ITEMS} бейлів ({filteredItems.length} доступно)
+                        </p>
+                    )}
                 </div>
 
                 {error && <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
@@ -281,7 +376,11 @@ export default function PalletBuilder({ onClose }: PalletBuilderProps) {
                     <button onClick={onClose} className="flex-1 py-3 text-slate-500 font-medium">Скасувати</button>
                     <button
                         onClick={handleStartBatch}
-                        className="flex-2 w-2/3 py-3 bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold shadow-lg shadow-blue-900/20 text-xl"
+                        disabled={!canStart}
+                        className={`flex-2 w-2/3 py-3 rounded-xl font-bold shadow-lg text-xl transition-all ${canStart
+                            ? 'bg-blue-700 hover:bg-blue-800 text-white shadow-blue-900/20'
+                            : 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                            }`}
                     >
                         РОЗПОЧАТИ
                     </button>
@@ -303,7 +402,7 @@ export default function PalletBuilder({ onClose }: PalletBuilderProps) {
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 text-xs">✏️</div>
                 </div>
                 <div className="text-center flex-1">
-                    <span className="text-sm opacity-50 block">DRAG & DROP ТЮКИ 👇</span>
+                    <span className="text-sm opacity-50 block">DRAG & DROP БЕЙЛИ 👇</span>
                 </div>
                 <div className="text-right">
                     <div className="text-xs opacity-50 uppercase tracking-widest">Статус</div>
@@ -340,7 +439,7 @@ export default function PalletBuilder({ onClose }: PalletBuilderProps) {
                     {/* Totals */}
                     <div className="mt-auto space-y-4">
                         <div className="bg-white p-4 rounded-xl border border-slate-200">
-                            <div className="text-sm text-slate-500">Тюків</div>
+                            <div className="text-sm text-slate-500">Бейлів</div>
                             <div className="text-3xl font-bold text-slate-800">{currentBatch.items.length}</div>
                         </div>
                         <div className="bg-blue-600 p-4 rounded-xl text-white shadow-lg">
@@ -366,7 +465,7 @@ export default function PalletBuilder({ onClose }: PalletBuilderProps) {
                         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-50">
                             <div className="text-6xl mb-4 animate-bounce">⬇️</div>
                             <div className="text-slate-400 font-bold text-xl border-dashed border-4 border-slate-200 p-8 rounded-3xl">
-                                Перетягніть тюки сюди
+                                Перетягніть бейли сюди
                             </div>
                         </div>
                     )}
@@ -378,6 +477,7 @@ export default function PalletBuilder({ onClose }: PalletBuilderProps) {
                                 <div className="flex-1">
                                     <div className="font-bold text-slate-800 text-sm">№ {item.serialNumber}</div>
                                     <div className="text-[10px] text-slate-500">{item.productName}</div>
+                                    <div className="text-[9px] font-mono text-slate-400">{item.barcode}</div>
                                 </div>
                                 <div className="text-right font-mono font-bold text-slate-700 text-sm">
                                     {item.weight.toFixed(1)}
@@ -396,38 +496,52 @@ export default function PalletBuilder({ onClose }: PalletBuilderProps) {
                 {/* Right: Stock Source (30%) */}
                 <div className="w-1/3 bg-slate-50 flex flex-col border-l border-slate-200">
                     <div className="p-3 bg-slate-200 border-b border-slate-300 text-xs font-bold text-slate-700 uppercase flex justify-between items-center shadow-sm z-10">
-                        <span>Журнал Тюків (Склад)</span>
-                        <span className="bg-slate-300 px-2 py-0.5 rounded-full text-[10px]">{availableItems.length}</span>
+                        <span>{selectedProduct} / {selectedSort}</span>
+                        <span className="bg-slate-300 px-2 py-0.5 rounded-full text-[10px]">
+                            {availableItems.filter(i =>
+                                (!selectedProduct || i.productName === selectedProduct) &&
+                                (!selectedSort || i.sort === selectedSort)
+                            ).length}
+                        </span>
                     </div>
                     <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                        {availableItems.map(item => (
-                            <div
-                                key={item.id}
-                                draggable
-                                onDragStart={(e) => handleDragStart(e, item)}
-                                className="w-full text-left bg-white p-2 rounded-lg border border-slate-200 hover:border-blue-400 hover:shadow-md cursor-grab active:cursor-grabbing transition-all flex justify-between items-center group select-none"
-                            >
-                                <div className="pointer-events-none">
-                                    <div className="font-bold text-xs text-slate-700">№ {item.serialNumber}</div>
-                                    <div className="text-[10px] text-slate-500">{item.productName} ({item.sort})</div>
+                        {availableItems
+                            .filter(item =>
+                                (!selectedProduct || item.productName === selectedProduct) &&
+                                (!selectedSort || item.sort === selectedSort)
+                            )
+                            .map(item => (
+                                <div
+                                    key={item.id}
+                                    draggable
+                                    onDragStart={(e) => handleDragStart(e, item)}
+                                    className="w-full text-left bg-white p-2 rounded-lg border border-slate-200 hover:border-blue-400 hover:shadow-md cursor-grab active:cursor-grabbing transition-all flex justify-between items-center group select-none"
+                                >
+                                    <div className="pointer-events-none">
+                                        <div className="font-bold text-xs text-slate-700">№ {item.serialNumber}</div>
+                                        <div className="text-[10px] text-slate-500">{item.productName} ({item.sort})</div>
+                                        <div className="text-[9px] font-mono text-slate-400">{item.barcode}</div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-mono text-xs font-bold pointer-events-none">{item.weight}</span>
+                                        <button
+                                            onClick={() => handleAddFromStock(item)}
+                                            className="bg-green-100 hover:bg-green-200 text-green-700 p-1.5 rounded-md transition-colors"
+                                            title="Додати до палети"
+                                        >
+                                            ➕
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <span className="font-mono text-xs font-bold pointer-events-none">{item.weight}</span>
-                                    <button
-                                        onClick={() => handleAddFromStock(item)}
-                                        className="bg-green-100 hover:bg-green-200 text-green-700 p-1.5 rounded-md transition-colors"
-                                        title="Додати до палети"
-                                    >
-                                        ➕
-                                    </button>
+                            ))}
+                        {availableItems.filter(i =>
+                            (!selectedProduct || i.productName === selectedProduct) &&
+                            (!selectedSort || i.sort === selectedSort)
+                        ).length === 0 && (
+                                <div className="text-center p-4 text-xs text-slate-400">
+                                    Немає доступних бейлів
                                 </div>
-                            </div>
-                        ))}
-                        {availableItems.length === 0 && (
-                            <div className="text-center p-4 text-xs text-slate-400">
-                                Немає доступних тюків
-                            </div>
-                        )}
+                            )}
                     </div>
                 </div>
             </div>

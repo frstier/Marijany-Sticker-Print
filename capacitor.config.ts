@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.marijany.stickerprint',
-  appName: 'Marijany Sticker Print',
+  appId: 'com.hemp.stickerprint',
+  appName: 'HeMP',
   webDir: 'dist'
 };
 

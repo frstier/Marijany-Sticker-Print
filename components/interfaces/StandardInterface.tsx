@@ -393,6 +393,7 @@ export default function StandardInterface() {
                 currentUser={currentUser}
                 onLogout={logout}
                 onSettingsClick={() => setIsSettingsOpen(true)}
+                onQueueClick={() => setIsQueueOpen(true)}
                 printerData={printerData}
             />
 
@@ -431,7 +432,7 @@ export default function StandardInterface() {
                                     {selectedProduct && (
                                         <div className={`mt-0 pt-0 border-t-0 flex-1 animate-fade-in ${currentUser?.role === 'operator' && selectedProduct.id !== '3' ? 'w-full' : ''}`}>
                                             <div className="flex justify-between items-center mb-2 md:mb-3">
-                                                <label className="text-xs md:text-sm font-bold text-slate-600 uppercase tracking-wide">№ продукції</label>
+                                                <label className="text-xs md:text-sm font-bold text-slate-600 uppercase tracking-wide">№ бейла</label>
                                                 <span className="text-[10px] md:text-xs font-medium text-slate-400 truncate max-w-[80px]">
                                                     {currentUser?.role === 'operator' ? 'Тільки перегляд' : 'Ред.'}
                                                 </span>
@@ -519,23 +520,26 @@ export default function StandardInterface() {
             <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_-4px_rgba(0,0,0,0.15)]">
                 <div className="p-4 flex gap-3 md:gap-4 max-w-7xl mx-auto md:px-8">
                     {/* Deferred Print Button */}
-                    {!isPrintDisabled && (
-                        <button
-                            onClick={() => {
-                                deferredData.addToQueue(labelData);
-                                setWeight('');
-                                setProductCounters(prev => ({ ...prev, [selectedProduct!.id]: (prev[selectedProduct!.id] ?? INITIAL_SERIAL) + 1 }));
-                                alert("Додано в чергу!");
-                            }}
-                            className="flex-1 py-3 md:py-4 rounded-xl font-bold text-lg md:text-xl border-2 border-[#115740] text-[#115740] hover:bg-green-50 active:bg-green-100 transition-colors flex items-center justify-center gap-2 group"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 md:h-7 md:w-7 transition-transform group-active:scale-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <span className="hidden md:inline">Відкласти друк</span>
-                            <span className="md:hidden">Відкласти</span>
-                        </button>
-                    )}
+                    {/* Deferred Print Button - Always visible, disabled if invalid */}
+                    <button
+                        onClick={() => {
+                            deferredData.addToQueue(labelData);
+                            setWeight('');
+                            setProductCounters(prev => ({ ...prev, [selectedProduct!.id]: (prev[selectedProduct!.id] ?? INITIAL_SERIAL) + 1 }));
+                            alert("Додано в чергу!");
+                        }}
+                        disabled={isPrintDisabled}
+                        className={`flex-1 py-3 md:py-4 rounded-xl font-bold text-lg md:text-xl border-2 flex items-center justify-center gap-2 group transition-colors ${isPrintDisabled
+                            ? 'border-slate-200 text-slate-300 cursor-not-allowed'
+                            : 'border-[#115740] text-[#115740] hover:bg-green-50 active:bg-green-100'
+                            }`}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 md:h-7 md:w-7 transition-transform ${!isPrintDisabled && 'group-active:scale-90'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="hidden md:inline">Відкласти друк</span>
+                        <span className="md:hidden">Відкласти</span>
+                    </button>
 
                     <button
                         onClick={handlePrintClick}

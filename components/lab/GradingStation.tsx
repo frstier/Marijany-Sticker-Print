@@ -51,7 +51,7 @@ export default function GradingStation({ onClose, currentUserId }: GradingStatio
 
         try {
             GradingService.saveGrade(scannedData.raw, selectedSort, currentUserId);
-            setSuccessMsg(`Тюк №${scannedData.serial} збережено як "${selectedSort}"`);
+            setSuccessMsg(`Бейл №${scannedData.serial} збережено як "${selectedSort}"`);
 
             // Reset for next
             setScannedData(null);
@@ -133,8 +133,8 @@ export default function GradingStation({ onClose, currentUserId }: GradingStatio
                                         key={sort}
                                         onClick={() => setSelectedSort(sort)}
                                         className={`p-4 rounded-xl text-lg font-bold border-2 transition-all ${selectedSort === sort
-                                                ? 'border-purple-600 bg-purple-600 text-white shadow-lg shadow-purple-900/20 transform scale-105'
-                                                : 'border-slate-200 text-slate-600 hover:border-purple-300 hover:bg-purple-50'
+                                            ? 'border-purple-600 bg-purple-600 text-white shadow-lg shadow-purple-900/20 transform scale-105'
+                                            : 'border-slate-200 text-slate-600 hover:border-purple-300 hover:bg-purple-50'
                                             }`}
                                     >
                                         {sort}
@@ -155,8 +155,8 @@ export default function GradingStation({ onClose, currentUserId }: GradingStatio
                                 onClick={handleSave}
                                 disabled={!selectedSort}
                                 className={`flex-[2] py-4 rounded-xl font-bold text-xl transition-all shadow-xl ${selectedSort
-                                        ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-900/20 active:scale-95'
-                                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                    ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-900/20 active:scale-95'
+                                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                                     }`}
                             >
                                 ЗБЕРЕГТИ РЕЗУЛЬТАТ

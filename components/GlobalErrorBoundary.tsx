@@ -36,7 +36,7 @@ export class GlobalErrorBoundary extends React.Component<Props, State> {
                     <h1 className="text-2xl font-bold mb-4" style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1rem' }}>Something went wrong</h1>
                     <div
                         className="bg-white p-4 rounded shadow-lg max-w-full w-full overflow-auto border border-red-200"
-                        style={{ backgroundColor: 'white', padding: '1rem', borderRadius: '0.25rem', padding: '1rem', border: '1px solid #fecaca', width: '100%' }}
+                        style={{ backgroundColor: 'white', padding: '1rem', borderRadius: '0.25rem', border: '1px solid #fecaca', width: '100%' }}
                     >
                         <h2 className="text-lg font-semibold mb-2" style={{ fontWeight: '600', marginBottom: '0.5rem' }}>{this.state.error?.toString()}</h2>
                         <details className="text-xs font-mono whitespace-pre-wrap text-slate-600" style={{ fontSize: '0.75rem', fontFamily: 'monospace', whiteSpace: 'pre-wrap', color: '#475569' }}>

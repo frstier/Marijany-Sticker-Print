@@ -11,6 +11,17 @@ app.use(express.json());
 
 // --- ROUTES ---
 
+// GET Health Check (Test DB Connection)
+app.get('/api/health', async (req, res) => {
+    try {
+        const result = await db.query('SELECT NOW() as now');
+        res.json({ status: 'ok', timestamp: result.rows[0].now, message: 'Database connection successful' });
+    } catch (err) {
+        console.error("Health Check Failed:", err);
+        res.status(500).json({ status: 'error', error: 'Database connection failed' });
+    }
+});
+
 // GET All Items (Combined Dashboard)
 app.get('/api/items', async (req, res) => {
     try {

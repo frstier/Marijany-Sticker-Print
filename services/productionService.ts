@@ -18,7 +18,7 @@ const STORAGE_KEY = 'zebra_production_db_v1';
 // ProductionService.ts (Updated for API)
 
 const API_URL = 'http://localhost:3000/api';
-const USE_API = true; // TOGGLE: Set to true to use Backend
+const USE_API = false; // TOGGLE: Set to true to use Backend
 
 export const ProductionService = {
     // --- State ---
@@ -149,7 +149,132 @@ export const ProductionService = {
 
     async getGradedItems(): Promise<ProductionItem[]> {
         const items = await this.fetchItems();
+        // Return only 'graded' items that are NOT palletized or shipped yet
         return items.filter(i => i.status === 'graded');
+    },
+
+    async getItemsByBatchId(batchId: string): Promise<ProductionItem[]> {
+        const items = await this.fetchItems();
+        return items.filter(i => i.batchId === batchId);
+    },
+
+    async palletizeItems(ids: string[], batchId: string): Promise<void> {
+        if (USE_API) {
+            try {
+                await Promise.all(ids.map(id =>
+                    fetch(`${API_URL}/items/${id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            status: 'palletized',
+                            batchId: batchId,
+                            palletizedAt: new Date().toISOString()
+                        })
+                    })
+                ));
+                return;
+            } catch (e) { console.error("API Palletize Failed", e); }
+        }
+
+        // Fallback Local
+        const items = this.getItemsLocal();
+        let updated = false;
+
+        ids.forEach(id => {
+            const idx = items.findIndex(i => i.id === id);
+            if (idx !== -1) {
+                items[idx] = {
+                    ...items[idx],
+                    status: 'palletized',
+                    batchId: batchId,
+                    palletizedAt: new Date().toISOString()
+                };
+                updated = true;
+            }
+        });
+
+        if (updated) {
+            this.saveItemsLocal(items);
+        }
+    },
+
+    async unpalletizeItems(ids: string[]): Promise<void> {
+        if (USE_API) {
+            try {
+                await Promise.all(ids.map(id =>
+                    fetch(`${API_URL}/items/${id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            status: 'graded',
+                            batchId: null,
+                            palletizedAt: null
+                        })
+                    })
+                ));
+                return;
+            } catch (e) { console.error("API Unpalletize Failed", e); }
+        }
+
+        // Fallback Local
+        const items = this.getItemsLocal();
+        let updated = false;
+
+        ids.forEach(id => {
+            const idx = items.findIndex(i => i.id === id);
+            if (idx !== -1) {
+                items[idx] = {
+                    ...items[idx],
+                    status: 'graded',
+                    batchId: undefined,
+                    palletizedAt: undefined
+                };
+                updated = true;
+            }
+        });
+
+        if (updated) {
+            this.saveItemsLocal(items);
+        }
+    },
+
+    async shipItems(ids: string[]): Promise<void> {
+        if (USE_API) {
+            try {
+                // Batch update or individual updates
+                await Promise.all(ids.map(id =>
+                    fetch(`${API_URL}/items/${id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            status: 'shipped',
+                            shippedAt: new Date().toISOString()
+                        })
+                    })
+                ));
+                return;
+            } catch (e) { console.error("API Ship Failed", e); }
+        }
+
+        // Fallback Local
+        const items = this.getItemsLocal();
+        let updated = false;
+
+        ids.forEach(id => {
+            const idx = items.findIndex(i => i.id === id);
+            if (idx !== -1) {
+                items[idx] = {
+                    ...items[idx],
+                    status: 'shipped',
+                    shippedAt: new Date().toISOString()
+                };
+                updated = true;
+            }
+        });
+
+        if (updated) {
+            this.saveItemsLocal(items);
+        }
     },
 
     async gradeItem(id: string, sort: string, userId: string): Promise<ProductionItem> {
@@ -181,6 +306,99 @@ export const ProductionService = {
         items[idx] = updatedItem;
         this.saveItemsLocal(items);
         return updatedItem;
+    },
+
+    async revertGrade(id: string): Promise<void> {
+        if (USE_API) {
+            try {
+                await fetch(`${API_URL}/items/${id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        status: 'created',
+                        sort: null,
+                        gradedAt: null,
+                        labUserId: null
+                    })
+                });
+                return;
+            } catch (e) { console.error("API Revert Failed", e); }
+        }
+
+        // Fallback Local
+        const items = this.getItemsLocal();
+        const idx = items.findIndex(i => i.id === id);
+        if (idx !== -1) {
+            items[idx] = {
+                ...items[idx],
+                status: 'created',
+                sort: undefined,
+                gradedAt: undefined,
+                labUserId: undefined
+            };
+            this.saveItemsLocal(items);
+        }
+    },
+
+    // --- Full CRUD for Journal ---
+
+    async getAllItems(): Promise<ProductionItem[]> {
+        // Return ALL items for the journal (history view)
+        return await this.fetchItems();
+    },
+
+    async createItem(item: ProductionItem): Promise<ProductionItem> {
+        if (USE_API) {
+            try {
+                const res = await fetch(`${API_URL}/items`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(item)
+                });
+                if (res.ok) return await res.json();
+            } catch (e) { console.error("API Create Failed", e); }
+        }
+
+        // Fallback Local
+        const items = this.getItemsLocal();
+        items.push(item);
+        this.saveItemsLocal(items);
+        return item;
+    },
+
+    async updateItem(item: ProductionItem): Promise<void> {
+        if (USE_API) {
+            try {
+                await fetch(`${API_URL}/items/${item.id}`, {
+                    method: 'PUT', // or PATCH
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(item)
+                });
+            } catch (e) { console.error("API Update Failed", e); }
+        }
+
+        // Fallback Local
+        const items = this.getItemsLocal();
+        const idx = items.findIndex(i => i.id === item.id);
+        if (idx !== -1) {
+            items[idx] = item;
+            this.saveItemsLocal(items);
+        }
+    },
+
+    async deleteItem(id: string): Promise<void> {
+        if (USE_API) {
+            try {
+                await fetch(`${API_URL}/items/${id}`, {
+                    method: 'DELETE'
+                });
+            } catch (e) { console.error("API Delete Failed", e); }
+        }
+
+        // Fallback Local
+        const items = this.getItemsLocal();
+        const filtered = items.filter(i => i.id !== id);
+        this.saveItemsLocal(filtered);
     },
 
     // --- Mock Data Generator (Keep for Fallback) ---

@@ -87,6 +87,15 @@ export const DatabaseService = {
         }
     },
 
+    // Read
+    async getUsers(): Promise<User[]> {
+        return USERS;
+    },
+
+    async getProducts(): Promise<Product[]> {
+        return PRODUCTS;
+    },
+
     // ... (seedUsers, syncProducts, getConnection)
 
     async addToHistory(entry: LabelData & { timestamp?: string }): Promise<void> {
@@ -168,6 +177,71 @@ export const DatabaseService = {
         } catch (error) {
             console.error('Backup failed:', error);
             throw error;
+        }
+    },
+
+    async importDatabase(jsonString: string): Promise<void> {
+        if (!db) throw new Error("Database not initialized");
+
+        try {
+            const data = JSON.parse(jsonString);
+
+            // Basic validation
+            if (!data.meta || !data.tables || !data.tables.users || !data.tables.history) {
+                throw new Error("Invalid backup file format");
+            }
+
+            // Begin Transaction
+            await db.execute('BEGIN TRANSACTION');
+
+            // 1. Clear Tables
+            await db.execute('DELETE FROM users');
+            await db.execute('DELETE FROM products');
+            await db.execute('DELETE FROM history');
+
+            // 2. Restore Users
+            for (const u of data.tables.users) {
+                await db.run(
+                    'INSERT INTO users (id, name, role, pin) VALUES (?, ?, ?, ?)',
+                    [u.id, u.name, u.role, u.pin]
+                );
+            }
+
+            // 3. Restore Products (Optional checks if needed)
+            if (data.tables.products && data.tables.products.length > 0) {
+                for (const p of data.tables.products) {
+                    await db.run(
+                        'INSERT INTO products (id, name, name_en, sku, category, sorts) VALUES (?, ?, ?, ?, ?, ?)',
+                        [p.id, p.name, p.name_en, p.sku, p.category, p.sorts]
+                    );
+                }
+            } else {
+                // If restore has no products, maybe we should re-seed defaults? 
+                // For now, let's assume backup is authority.
+                // Or call this.syncProducts() if we want defaults.
+            }
+
+            // 4. Restore History
+            for (const h of data.tables.history) {
+                await db.run(
+                    `INSERT INTO history (id, timestamp, product_name, sku, weight, serial_number, sort_label, sort_value, status) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [h.id, h.timestamp, h.product_name, h.sku, h.weight, h.serial_number, h.sort_label, h.sort_value, h.status || 'ok']
+                );
+            }
+
+            // Commit
+            await db.execute('COMMIT');
+
+            // Re-sync defaults to be safe (product list might be updated in code)
+            await this.syncProducts();
+
+            console.log('--- Restore Complete ---');
+
+        } catch (e) {
+            await db.execute('ROLLBACK');
+            console.error('Import failed:', e);
+            throw e;
         }
     },
 

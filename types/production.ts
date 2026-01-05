@@ -1,4 +1,4 @@
-export type ItemStatus = 'created' | 'graded' | 'palletized';
+export type ItemStatus = 'created' | 'graded' | 'palletized' | 'shipped';
 
 export interface ProductionItem {
     id: string;
@@ -23,4 +23,7 @@ export interface ProductionItem {
     // Accountant Data
     batchId?: string; // If palletized
     palletizedAt?: string;
+
+    // Shipping Data
+    shippedAt?: string;
 }

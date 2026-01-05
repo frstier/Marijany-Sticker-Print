@@ -40,36 +40,64 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users = USERS }) => 
     const [error, setError] = useState('');
     const [isInfoOpen, setIsInfoOpen] = useState(false);
 
+    // 2FA State
+    const [step, setStep] = useState<'pin' | '2fa'>('pin');
+    const [answer, setAnswer] = useState('');
+
     const handleKeyPress = (key: string) => {
-        if (pin.length < 4) {
-            setPin(prev => prev + key);
-            setError('');
+        if (step === 'pin') {
+            if (pin.length < 4) {
+                setPin(prev => prev + key);
+                setError('');
+            }
         }
     };
 
     const handleClear = () => {
         setPin('');
         setError('');
+        setAnswer('');
+        setStep('pin');
     };
 
     const handleBackspace = () => {
-        setPin(prev => prev.slice(0, -1));
-        setError('');
+        if (step === 'pin') {
+            setPin(prev => prev.slice(0, -1));
+            setError('');
+        }
     };
 
-    const handleSubmit = () => {
+    const handlePinSubmit = () => {
         if (pin === selectedUser.pin) {
-            onLogin(selectedUser);
+            if (selectedUser.role === 'admin') {
+                setStep('2fa');
+                setError('');
+            } else {
+                // Bypass 2FA for non-admins
+                onLogin(selectedUser);
+            }
         } else {
             setError('Невірний PIN-код');
             setPin('');
         }
     };
 
-    // Auto-submit when 4 digits entered
+    const handle2FASubmit = (e?: React.FormEvent) => {
+        e?.preventDefault();
+        const normalize = (str: string) => str.trim().toLowerCase();
+        const validAnswers = ['liverpool', 'ліверпуль'];
+
+        if (validAnswers.includes(normalize(answer))) {
+            onLogin(selectedUser);
+        } else {
+            setError('Невірна відповідь');
+        }
+    };
+
+    // Auto-submit when 4 digits entered (PIN step)
     useEffect(() => {
-        if (pin.length === 4) {
-            handleSubmit();
+        if (pin.length === 4 && step === 'pin') {
+            handlePinSubmit();
         }
     }, [pin]);
 
@@ -96,82 +124,126 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users = USERS }) => 
                         <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
                     </div>
                     <h1 className="text-xl md:text-2xl font-bold text-white">Авторизація</h1>
-                    <p className="text-emerald-100 text-sm mt-1 mb-1">Marijany Sticker Print v0.9b</p>
+                    <p className="text-emerald-100 text-sm mt-1 mb-1">HeMP v1.0</p>
                 </div>
 
                 <div className="p-6">
-                    {/* User Selection */}
-                    <div className="mb-6">
-                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                            Оберіть користувача
-                        </label>
-                        <div className="relative">
-                            <select
-                                value={selectedUser.id}
-                                onChange={(e) => {
-                                    const user = users.find(u => u.id === e.target.value);
-                                    if (user) {
-                                        setSelectedUser(user);
-                                        setPin('');
-                                        setError('');
-                                    }
-                                }}
-                                className="w-full appearance-none bg-slate-50 border border-slate-200 text-slate-700 py-3 px-4 pr-8 rounded-lg leading-tight focus:outline-none focus:bg-white focus:border-[#115740] font-bold"
-                            >
-                                {users.map(user => (
-                                    <option key={user.id} value={user.id}>
-                                        {user.name}
-                                    </option>
-                                ))}
-                            </select>
-                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-700">
-                                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
+                    {step === 'pin' ? (
+                        <>
+                            {/* User Selection */}
+                            <div className="mb-6">
+                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                                    Оберіть користувача
+                                </label>
+                                <div className="relative">
+                                    <select
+                                        value={selectedUser.id}
+                                        onChange={(e) => {
+                                            const user = users.find(u => u.id === e.target.value);
+                                            if (user) {
+                                                setSelectedUser(user);
+                                                setPin('');
+                                                setError('');
+                                            }
+                                        }}
+                                        className="w-full appearance-none bg-slate-50 border border-slate-200 text-slate-700 py-3 px-4 pr-8 rounded-lg leading-tight focus:outline-none focus:bg-white focus:border-[#115740] font-bold"
+                                    >
+                                        {users.map(user => (
+                                            <option key={user.id} value={user.id}>
+                                                {user.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-700">
+                                        <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
 
-                    {/* PIN Display */}
-                    <div className="mb-6">
-                        <div className="flex justify-center gap-4 mb-2">
-                            {[0, 1, 2, 3].map(i => (
-                                <div
-                                    key={i}
-                                    className={`w-4 h-4 rounded-full border-2 transition-colors ${i < pin.length
-                                        ? 'bg-[#115740] border-[#115740]'
-                                        : 'border-slate-300 bg-transparent'
-                                        }`}
+                            {/* PIN Display */}
+                            <div className="mb-6">
+                                <div className="flex justify-center gap-4 mb-2">
+                                    {[0, 1, 2, 3].map(i => (
+                                        <div
+                                            key={i}
+                                            className={`w-4 h-4 rounded-full border-2 transition-colors ${i < pin.length
+                                                ? 'bg-[#115740] border-[#115740]'
+                                                : 'border-slate-300 bg-transparent'
+                                                }`}
+                                        />
+                                    ))}
+                                </div>
+                                <div className="h-6 text-center">
+                                    {error && <span className="text-red-500 text-sm font-medium animate-pulse">{error}</span>}
+                                </div>
+                            </div>
+
+                            {/* Simple Keypad */}
+                            <div className="grid grid-cols-3 gap-2 md:gap-3">
+                                {keys.map((key) => {
+                                    if (key === 'empty') return <div key={key} />;
+                                    if (key === 'back') return (
+                                        <button
+                                            key={key}
+                                            onClick={handleBackspace}
+                                            className="h-12 md:h-14 flex items-center justify-center text-slate-500 hover:bg-slate-100 rounded-lg transition-colors font-bold"
+                                        >
+                                            ⌫
+                                        </button>
+                                    );
+                                    return (
+                                        <button
+                                            key={key}
+                                            onClick={() => handleKeyPress(key)}
+                                            className="h-12 md:h-14 bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold text-xl rounded-lg border-b-2 border-slate-200 active:border-b-0 active:translate-y-[2px] transition-all"
+                                        >
+                                            {key}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </>
+                    ) : (
+                        // 2FA Step
+                        <form onSubmit={handle2FASubmit} className="animate-fade-in">
+                            <button
+                                type="button"
+                                onClick={() => { setStep('pin'); setPin(''); setError(''); }}
+                                className="mb-4 text-sm text-slate-500 hover:text-[#115740] flex items-center gap-1"
+                            >
+                                ← Назад
+                            </button>
+
+                            <div className="mb-6 text-center">
+                                <div className="mb-2 text-4xl">⚽️</div>
+                                <label className="block font-bold text-slate-700 mb-2">
+                                    Який мій улюблений футбольний клуб?
+                                </label>
+                                <input
+                                    type="text"
+                                    value={answer}
+                                    onChange={(e) => {
+                                        setAnswer(e.target.value);
+                                        setError('');
+                                    }}
+                                    className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 focus:border-[#115740] focus:outline-none text-center font-bold text-lg"
+                                    placeholder="Відповідь..."
+                                    autoFocus
                                 />
-                            ))}
-                        </div>
-                        <div className="h-6 text-center">
-                            {error && <span className="text-red-500 text-sm font-medium animate-pulse">{error}</span>}
-                        </div>
-                    </div>
+                                <div className="h-6 text-center mt-2">
+                                    {error && <span className="text-red-500 text-sm font-medium animate-pulse">{error}</span>}
+                                </div>
+                            </div>
 
-                    {/* Simple Keypad */}
-                    <div className="grid grid-cols-3 gap-2 md:gap-3">
-                        {keys.map((key) => {
-                            if (key === 'empty') return <div key={key} />;
-                            if (key === 'back') return (
-                                <button
-                                    key={key}
-                                    onClick={handleBackspace}
-                                    className="h-12 md:h-14 flex items-center justify-center text-slate-500 hover:bg-slate-100 rounded-lg transition-colors font-bold"
-                                >
-                                    ⌫
-                                </button>
-                            );
-                            return (
-                                <button
-                                    key={key}
-                                    onClick={() => handleKeyPress(key)}
-                                    className="h-12 md:h-14 bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold text-xl rounded-lg border-b-2 border-slate-200 active:border-b-0 active:translate-y-[2px] transition-all"
-                                >
-                                    {key}
-                                </button>
-                            );
-                        })}
-                    </div>
+                            <button
+                                type="submit"
+                                disabled={!answer}
+                                className="w-full py-4 bg-[#115740] hover:bg-[#0d4532] text-white font-bold rounded-xl shadow-lg shadow-emerald-900/20 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                ПІДТВЕРДИТИ
+                            </button>
+                        </form>
+                    )}
                 </div>
             </div>
         </div>

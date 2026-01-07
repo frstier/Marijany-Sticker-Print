@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { LabelData } from '../types';
 import { DataManager } from '../services/dataManager';
+import { ProductionService } from '../services/productionService';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { read, utils, write } from 'xlsx';
@@ -42,13 +43,33 @@ export function useHistory() {
         };
 
         // Update State
-        const newHistory = [enrichedEntry, ...history].slice(0, 500); // Increased limit for better history
+        const newHistory = [enrichedEntry, ...history].slice(0, 500);
         setHistory(newHistory);
 
-        // Save Local
+        // Save Local (Backup)
         localStorage.setItem(LOCAL_STORAGE_HISTORY_KEY, JSON.stringify(newHistory));
 
-        // Save via DataManager (DB or Cloud)
+        // SYNC TO SUPABASE (via ProductionService)
+        try {
+            // Map LabelData -> ProductionItem
+            await ProductionService.createItem({
+                id: enrichedEntry.id, // Use unique ID
+                barcode: enrichedEntry.barcode || '', // Ensure barcode is set
+                date: enrichedEntry.date,
+                productName: enrichedEntry.product?.name || 'Unknown',
+                productNameEn: enrichedEntry.product?.name_en,
+                serialNumber: enrichedEntry.serialNumber,
+                weight: parseFloat(enrichedEntry.weight) || 0,
+                status: 'created',
+                createdAt: enrichedEntry.timestamp,
+                operatorId: enrichedEntry.operatorId
+            });
+            console.log('✅ Synced to Supabase/ProductionService');
+        } catch (e) {
+            console.error("Failed to sync to ProductionService", e);
+        }
+
+        // Save via DataManager (Legacy/DB) if needed
         try {
             await DataManager.getService().addToHistory(enrichedEntry);
         } catch (e) {
@@ -56,54 +77,78 @@ export function useHistory() {
         }
     };
 
-    const updateHistoryEntry = async (updatedEntry: LabelData, currentUser: any) => {
-        // Permission Check
+    const updateHistoryEntry = async (updatedEntry: LabelData, currentUser: any): Promise<boolean> => {
         const existing = history.find(h => h.id === updatedEntry.id);
-        if (!existing) return;
+        if (!existing) return false;
 
-        const isOwner = existing.operatorId === currentUser.id;
-        const isAdmin = currentUser.role === 'admin';
-
-        if (!isOwner && !isAdmin) {
-            alert("Ви можете редагувати тільки власні записи");
-            return;
-        }
-
+        // Update local state
         const newHistory = history.map(h => h.id === updatedEntry.id ? updatedEntry : h);
         setHistory(newHistory);
         localStorage.setItem(LOCAL_STORAGE_HISTORY_KEY, JSON.stringify(newHistory));
 
+        // Sync to Supabase via DataManager (update, not insert)
+        let syncSuccess = false;
         try {
-            // If DataService supports update, otherwise we might need specific method
-            await DataManager.getService().addToHistory(updatedEntry); // Overwrite if same ID
-        } catch (e) { console.error(e); }
+            const service = DataManager.getService() as any;
+            if (service.updateHistoryEntry) {
+                await service.updateHistoryEntry(updatedEntry);
+                console.log('✅ Updated in Supabase history');
+                syncSuccess = true;
+            }
+        } catch (e) {
+            console.error('Failed to update in Supabase', e);
+        }
+
+        // Also sync to ProductionService (production_items table)
+        try {
+            await ProductionService.updateItemFromHistory(existing, updatedEntry);
+            console.log('✅ Updated in production_items');
+        } catch (e) {
+            console.error('Failed to sync to ProductionService', e);
+        }
+
+        return syncSuccess;
+    };
+
+    // 🧪 BETA: Check for duplicate serial numbers
+    const checkDuplicate = (serialNumber: number, productName: string, date: string): LabelData | null => {
+        return history.find(h =>
+            h.serialNumber === serialNumber &&
+            h.product?.name === productName &&
+            h.date === date &&
+            h.status !== 'cancelled'
+        ) || null;
     };
 
     const deleteHistoryEntry = async (id: string, currentUser: any) => {
         const existing = history.find(h => h.id === id);
         if (!existing) return;
 
-        const isOwner = existing.operatorId === currentUser.id;
-        const isAdmin = currentUser.role === 'admin';
+        if (!window.confirm("Видалити цей запис повністю?")) return;
 
-        if (!isOwner && !isAdmin) {
-            alert("Ви можете видаляти тільки власні записи");
-            return;
-        }
-
-        if (!window.confirm("Видалити цей запис?")) return;
-
+        // Update local state
         const newHistory = history.filter(h => h.id !== id);
         setHistory(newHistory);
         localStorage.setItem(LOCAL_STORAGE_HISTORY_KEY, JSON.stringify(newHistory));
 
-        // Note: DataService might need deleteHistoryEntry implementation if not existing
+        // Delete from Supabase history table
         try {
             const service = DataManager.getService() as any;
             if (service.deleteHistoryEntry) {
                 await service.deleteHistoryEntry(id);
+                console.log('✅ Deleted from Supabase history');
             }
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error('Failed to delete from Supabase history', e);
+        }
+
+        // Also delete from production_items table
+        try {
+            await ProductionService.deleteItem(id);
+            console.log('✅ Deleted from production_items');
+        } catch (e) {
+            console.error('Failed to delete from production_items', e);
+        }
     };
 
     const clearHistory = () => {
@@ -372,11 +417,7 @@ export function useHistory() {
         return { success: false, message: "Авто-відправка не вдалася. Спробуйте завантажити файл вручну.", file };
     };
 
-    // NEW: We just return true/false if it exists locally, but we DON'T block in UI anymore based on this alone for "Overwrite" logic.
-    // However, to speed up UI, we might still want to know if it's a re-print.
-    const checkDuplicate = (productId: string, serialNumber: number): boolean => {
-        return history.some(item => item.product?.id === productId && item.serialNumber === serialNumber);
-    };
+    // OLD checkDuplicate removed - now using enhanced BETA version defined above
 
     // TEST: Generate Dummy Data
     const addDummyData = async () => {

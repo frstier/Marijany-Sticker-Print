@@ -3,6 +3,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { ProductionService } from '../../services/productionService';
 import { ProductionItem } from '../../types/production';
 import { utils, write } from 'xlsx';
+import NotificationBanner from '../ui/NotificationBanner';
+import { NotificationService, NOTIFICATION_THRESHOLD } from '../../services/notificationService';
 
 export default function LabInterface() {
     const { logout, currentUser } = useAuth();
@@ -15,6 +17,9 @@ export default function LabInterface() {
     const [searchQuery, setSearchQuery] = useState('');
     const deferredSearchQuery = useDeferredValue(searchQuery);
 
+    // Product filter
+    const [productFilter, setProductFilter] = useState<string>('');
+
     // Multi-select for batch grading
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [batchMode, setBatchMode] = useState(false);
@@ -23,6 +28,10 @@ export default function LabInterface() {
     const [showReport, setShowReport] = useState(false);
     const [reportEmail, setReportEmail] = useState(() => localStorage.getItem('lab_report_email') || '');
     const [emailSending, setEmailSending] = useState(false);
+
+    // Notification state
+    const [pendingCount, setPendingCount] = useState(0);
+    const [showNotification, setShowNotification] = useState(true);
 
     // Mock Sorts -> Now Dynamic
     // const sorts = ['1 Сорт', '2 Сорт', '3 Сорт', 'Нестандарт', 'Сміття'];
@@ -69,6 +78,10 @@ export default function LabInterface() {
 
     useEffect(() => {
         loadData();
+        // Check pending count for notification
+        NotificationService.getPendingCountForLab().then(count => {
+            setPendingCount(count);
+        });
     }, []);
 
     // Report handlers
@@ -194,10 +207,15 @@ export default function LabInterface() {
         }
     };
 
-    const filteredItems = pendingItems.filter(item =>
-        item.serialNumber.toString().includes(deferredSearchQuery) ||
-        item.barcode.includes(deferredSearchQuery)
-    );
+    // Get unique product names for filter buttons
+    const uniqueProducts = Array.from<string>(new Set(pendingItems.map(item => item.productName)));
+
+    const filteredItems = pendingItems.filter(item => {
+        const matchesSearch = item.serialNumber.toString().includes(deferredSearchQuery) ||
+            item.barcode.includes(deferredSearchQuery);
+        const matchesProduct = !productFilter || item.productName === productFilter;
+        return matchesSearch && matchesProduct;
+    });
 
     // Logout State (Local)
     const [logoutConfirm, setLogoutConfirm] = useState(false);
@@ -241,6 +259,15 @@ export default function LabInterface() {
                 </div>
             </div>
 
+            {/* Notification Banner */}
+            {showNotification && NotificationService.shouldShowNotification(pendingCount) && (
+                <NotificationBanner
+                    count={pendingCount}
+                    message={`Є ${pendingCount} неоприходуваних бейлів — перевірте список!`}
+                    onDismiss={() => setShowNotification(false)}
+                />
+            )}
+
             {/* Split View */}
             <div className="flex-1 flex overflow-hidden">
 
@@ -272,6 +299,32 @@ export default function LabInterface() {
                             placeholder="Пошук по №..."
                             className="w-full p-2 rounded-lg border border-slate-300 focus:border-purple-500 text-sm"
                         />
+                        {/* Product Filter Buttons */}
+                        {uniqueProducts.length > 1 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                                <button
+                                    onClick={() => setProductFilter('')}
+                                    className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${!productFilter
+                                        ? 'bg-purple-600 text-white'
+                                        : 'bg-slate-100 text-slate-600 hover:bg-purple-100'
+                                        }`}
+                                >
+                                    Всі ({pendingItems.length})
+                                </button>
+                                {uniqueProducts.map(product => (
+                                    <button
+                                        key={product}
+                                        onClick={() => setProductFilter(product)}
+                                        className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${productFilter === product
+                                            ? 'bg-purple-600 text-white'
+                                            : 'bg-slate-100 text-slate-600 hover:bg-purple-100'
+                                            }`}
+                                    >
+                                        {product.length > 15 ? product.substring(0, 13) + '...' : product} ({pendingItems.filter(i => i.productName === product).length})
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                         {/* Select All in batch mode */}
                         {batchMode && filteredItems.length > 0 && (
                             <div className="mt-2 flex items-center gap-2">

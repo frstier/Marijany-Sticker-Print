@@ -5,6 +5,8 @@ export interface BatchItem {
     sort: string; // The grade/quality
     date: string;
     productionItemId?: string; // Link to ProductionItem.id for status updates
+    sku?: string;
+    barcode?: string;
     // Original ZPL or parsed data could be stored here if needed
 }
 

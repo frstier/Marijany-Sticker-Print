@@ -26,14 +26,15 @@ export default function PalletReport({ onClose }: PalletReportProps) {
         loadPallets();
     }, []);
 
-    const loadPallets = () => {
-        const allBatches = PalletService.getBatches();
+    const loadPallets = async () => {
+        const allBatches = await PalletService.getBatches();
         // Only show closed pallets
         setPallets(allBatches.filter(b => b.status === 'closed'));
     };
 
     // Filter pallets
     const filteredPallets = pallets.filter(pallet => {
+        // ... (lines 37-54 unchanged)
         // Product filter
         if (filterProduct && !pallet.items.some(i => i.productName === filterProduct)) {
             return false;
@@ -100,7 +101,7 @@ export default function PalletReport({ onClose }: PalletReportProps) {
                 .filter((id): id is string => !!id);
 
             // Disband batch (removes from batches list)
-            PalletService.disbandBatch(palletId);
+            await PalletService.disbandBatch(palletId);
 
             // Return items to 'graded' status
             if (itemIds.length > 0) {

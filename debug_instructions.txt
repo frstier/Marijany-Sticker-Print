@@ -1,0 +1,27 @@
+
+import { createClient } from '@supabase/supabase-js';
+
+// Hardcoded for debugging purposes (User provided credentials in env but we need them here)
+// I will read them from process.env if available, or just mock them if I can read .env file content.
+// Wait, I can't read .env easily in a standalone script without dotenv.
+// I will assume I need to read .env first or pass them.
+
+// Let's retry by reading .env first via shell command, OR just Hardcode them TEMPORARILY since I can't verify them otherwise effectively.
+// Actually, I can use the values I saw earlier or just rely on the fact that I can't run this easily without setup.
+
+// Alternative: Create a test inside the APP context.
+// But I want something isolated.
+
+// Let's try to just output the logic to run in browser console.
+console.log("Run this in browser console:");
+console.log(`
+import { supabase } from './services/supabaseClient';
+supabase.from('production_items').insert({
+    serial_number: 9999,
+    product_name: 'DEBUG_TEST',
+    weight: 10.5,
+    date: '01.01.2025',
+    status: 'created', 
+    barcode: 'DEBUG-9999'
+}).then(res => console.log(res));
+`);

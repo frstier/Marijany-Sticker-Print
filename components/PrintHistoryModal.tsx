@@ -24,6 +24,7 @@ const PrintHistoryModal: React.FC<PrintHistoryModalProps> = ({
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editWeight, setEditWeight] = useState('');
     const [editSort, setEditSort] = useState('');
+    const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 
     if (!isOpen) return null;
 
@@ -39,15 +40,28 @@ const PrintHistoryModal: React.FC<PrintHistoryModalProps> = ({
         setEditingId(item.id || null);
         setEditWeight(item.weight);
         setEditSort(item.sortValue || '');
+        setSaveSuccess(null);
     };
 
     const handleSave = (item: LabelData) => {
-        onUpdate({
+        // Update the item with new weight
+        const updatedItem: LabelData = {
             ...item,
             weight: editWeight,
-            sortValue: editSort
-        });
+            sortValue: editSort,
+            // Update barcode with new weight (format: DD.MM.YYYY-SKU-Serial-Weight)
+            barcode: item.barcode?.replace(/\d+(\.\d+)?$/, editWeight) || item.barcode
+        };
+
+        onUpdate(updatedItem);
         setEditingId(null);
+        setSaveSuccess(`✅ Збережено! Вага: ${editWeight} кг. Передрук...`);
+
+        // Auto-trigger reprint with updated data
+        setTimeout(() => {
+            onReprint(updatedItem);
+            setSaveSuccess(null);
+        }, 500);
     };
 
     return (
@@ -63,6 +77,14 @@ const PrintHistoryModal: React.FC<PrintHistoryModalProps> = ({
                         <CloseIcon />
                     </button>
                 </div>
+
+                {/* Success Toast */}
+                {saveSuccess && (
+                    <div className="bg-green-100 border-b border-green-200 px-4 py-2 text-green-800 text-sm font-medium flex items-center gap-2 animate-fade-in">
+                        <span>{saveSuccess}</span>
+                        <span className="text-xs opacity-70">Лаборант та обліковець бачитимуть оновлені дані</span>
+                    </div>
+                )}
 
                 {/* Table Header (Desktop) */}
                 <div className="hidden md:grid grid-cols-8 gap-2 p-3 bg-[var(--bg-tertiary)] border-b border-[var(--border-color)] text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider">

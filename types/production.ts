@@ -19,6 +19,7 @@ export interface ProductionItem {
     sort?: string;
     gradedAt?: string;
     labUserId?: string;
+    operatorId?: string; // Operator who printed it
 
     // Accountant Data
     batchId?: string; // If palletized
@@ -26,4 +27,5 @@ export interface ProductionItem {
 
     // Shipping Data
     shippedAt?: string;
+    updatedAt?: string;
 }

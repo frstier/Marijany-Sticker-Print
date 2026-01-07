@@ -288,6 +288,24 @@ export default function StandardInterface() {
             console.warn("Printer not connected. Mocking print.");
         }
 
+        // 🧪 BETA: Check for duplicate serial number
+        const duplicate = historyData.checkDuplicate(
+            labelData.serialNumber,
+            selectedProduct.name,
+            labelData.date
+        );
+
+        if (duplicate) {
+            const proceed = window.confirm(
+                `⚠️ УВАГА: Дублікат!\n\n` +
+                `Бейл #${duplicate.serialNumber} для "${duplicate.product?.name}" ` +
+                `вже існує з вагою ${duplicate.weight} кг.\n\n` +
+                `Якщо це помилка - відредагуйте існуючий запис в Історії (📜).\n\n` +
+                `Продовжити друк все одно?`
+            );
+            if (!proceed) return;
+        }
+
         // Use selected product/weight for current print, OR provided args if I refactor later.
         // For now, let's keep executePrint for the MAIN UI print button.
         // And create a separate `handlePrintLabelData` for the queue.

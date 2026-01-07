@@ -21,6 +21,7 @@ export const USERS: User[] = [
   { id: '2', name: 'Лабораторія', role: 'lab', pin: '2222' },
   { id: '1', name: 'Обліковець', role: 'accountant', pin: '3333' },
   { id: '3', name: 'Агро', role: 'agro', pin: '4444' },
+  { id: '6', name: 'Звіт', role: 'report', pin: '5555' },
   { id: '4', name: 'Адміністратор', role: 'admin', pin: '7777' },
   { id: '99', name: 'TEST Postgres', role: 'postgres_user', pin: '9999' },
 ];

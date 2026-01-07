@@ -5,13 +5,32 @@ import StandardInterface from './components/interfaces/StandardInterface';
 import NewUserInterface from './components/interfaces/NewUserInterface';
 import LabInterface from './components/interfaces/LabInterface';
 import AdminInterface from './components/interfaces/AdminInterface';
+import ReportInterface from './components/interfaces/ReportInterface';
 
 import { UserService } from './services/userService';
+import { ConfigService } from './services/configService';
 
 export default function App() {
     const { currentUser, login } = useAuth();
-    // Load users from service
-    const [users] = React.useState(() => UserService.getUsers());
+    // Load users from service (Async)
+    const [users, setUsers] = React.useState<any[]>([]);
+    const [loadingUsers, setLoadingUsers] = React.useState(true);
+
+    React.useEffect(() => {
+        // Load global config from Supabase
+        ConfigService.loadAll().then(() => {
+            console.log('✅ Global config loaded');
+        });
+
+        UserService.getUsers().then(data => {
+            setUsers(data);
+            setLoadingUsers(false);
+        });
+    }, []);
+
+    if (loadingUsers) {
+        return <div className="min-h-screen flex items-center justify-center bg-slate-100 text-slate-500">Завантаження...</div>;
+    }
 
     // 1. Auth Gate
     if (!currentUser) {
@@ -32,6 +51,10 @@ export default function App() {
 
     if (currentUser.role === 'lab') {
         return <LabInterface />;
+    }
+
+    if (currentUser.role === 'report') {
+        return <ReportInterface />;
     }
 
     // Default to Standard Interface

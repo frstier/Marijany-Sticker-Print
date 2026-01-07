@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ZebraDevice, PrinterStatus } from '../types';
 import { zebraService } from '../services/zebraService';
+import { ConfigService } from '../services/configService';
 
 const SAVED_PRINTER_CONFIG_KEY = 'zebra_printer_config_v1';
 const SAVED_AGENT_IP_KEY = 'zebra_agent_ip';
@@ -12,10 +13,19 @@ export function usePrinter() {
     const [isSearchingPrinters, setIsSearchingPrinters] = useState(false);
     const [agentIp, setAgentIp] = useState("127.0.0.1");
 
-    // Load IP config
+    // Load IP config from Supabase/localStorage
     useEffect(() => {
-        const savedIp = localStorage.getItem(SAVED_AGENT_IP_KEY);
-        if (savedIp) setAgentIp(savedIp);
+        const loadConfig = async () => {
+            const config = ConfigService.getPrinterConfig();
+            if (config.agentIp) {
+                setAgentIp(config.agentIp);
+            } else {
+                // Fallback to old localStorage key
+                const savedIp = localStorage.getItem(SAVED_AGENT_IP_KEY);
+                if (savedIp) setAgentIp(savedIp);
+            }
+        };
+        loadConfig();
     }, []);
 
     // Connect Printer on Mount
@@ -23,8 +33,11 @@ export function usePrinter() {
         autoConnectPrinter();
     }, []);
 
-    const saveAgentIp = () => {
+    const saveAgentIp = async () => {
+        // Save to both ConfigService (Supabase) and localStorage
         localStorage.setItem(SAVED_AGENT_IP_KEY, agentIp);
+        await ConfigService.setPrinterConfig(agentIp, printer?.name || '');
+
         if (window.confirm("Щоб застосувати нову IP-адресу, потрібно перезавантажити сторінку. Перезавантажити зараз?")) {
             window.location.reload();
         }

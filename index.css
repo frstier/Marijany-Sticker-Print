@@ -55,13 +55,13 @@ body {
   --bg-tertiary: #334155;
   --bg-card: #1e293b;
   --bg-input: #334155;
-  --text-primary: #f1f5f9;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --border-color: #334155;
+  --text-primary: #ffffff;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --border-color: #475569;
   --accent-primary: #10b981;
   --accent-hover: #059669;
-  --shadow-color: rgba(0, 0, 0, 0.3);
+  --shadow-color: rgba(0, 0, 0, 0.4);
 }
 
 /* Auto Dark Mode (System Preference) */
@@ -72,13 +72,13 @@ body {
     --bg-tertiary: #334155;
     --bg-card: #1e293b;
     --bg-input: #334155;
-    --text-primary: #f1f5f9;
-    --text-secondary: #94a3b8;
-    --text-muted: #64748b;
-    --border-color: #334155;
+    --text-primary: #ffffff;
+    --text-secondary: #cbd5e1;
+    --text-muted: #94a3b8;
+    --border-color: #475569;
     --accent-primary: #10b981;
     --accent-hover: #059669;
-    --shadow-color: rgba(0, 0, 0, 0.3);
+    --shadow-color: rgba(0, 0, 0, 0.4);
   }
 }
 
@@ -101,4 +101,21 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+}
+
+/* Notification pulse animation */
+@keyframes pulse-slow {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 2s ease-in-out infinite;
 }

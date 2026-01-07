@@ -1,4 +1,6 @@
 import { ProductionItem } from '../types/production';
+import { supabase } from './supabaseClient';
+
 // reuse simple parser if needed, or duplicate logic to keep decoupled for now
 const parseBarcodeSimple = (code: string) => {
     try {
@@ -15,43 +17,49 @@ const parseBarcodeSimple = (code: string) => {
 
 const STORAGE_KEY = 'zebra_production_db_v1';
 
-// ProductionService.ts (Updated for API)
-
-const API_URL = 'http://localhost:3000/api';
-const USE_API = false; // TOGGLE: Set to true to use Backend
+// ProductionService.ts (Updated for Supabase)
+const USE_SUPABASE = true; // TOGGLE: Set to true to use Supabase
+const USE_API = false; // Legacy Mock API toggle
+const API_URL = ''; // Placeholder for legacy API URL
 
 export const ProductionService = {
     // --- State ---
 
-    // NEW: Async Fetch
+    // NEW: Async Fetch from Supabase
     async fetchItems(): Promise<ProductionItem[]> {
-        if (!USE_API) return this.getItemsLocal(); // Fallback to old sync method
+        // Fallback to local if credentials missing in env (though USE_SUPABASE forces check)
+        if (!USE_SUPABASE || !supabase) return this.getItemsLocal();
 
         try {
-            const res = await fetch(`${API_URL}/items`);
-            if (!res.ok) throw new Error('API Error');
-            const data = await res.json();
+            const { data, error } = await supabase
+                .from('production_items')
+                .select('*')
+                .order('created_at', { ascending: false });
 
-            // Map Snake_case (DB) to CamelCase (Frontend) if needed
-            // Our API seems to return snake_case for keys based on query `SELECT *`
-            // UNLESS we aliased them in the query.
-            // Let's assume standard mapping:
+            if (error) throw error;
+            if (!data) return [];
+
             return data.map((i: any) => ({
-                id: i.uid || i.id,
+                id: i.id,
                 barcode: i.barcode,
                 date: i.date,
-                productName: i.product_name || i.productName,
-                productNameEn: i.product_name_en || i.productNameEn,
-                serialNumber: i.serial_number || i.serialNumber,
-                weight: parseFloat(i.weight),
-                status: i.status,
+                productName: i.product_name,
+                productNameEn: i.product_name_en,
+                serialNumber: i.serial_number,
+                weight: i.weight,
+                status: i.status as any, // 'created' | 'graded' | ...
                 sort: i.sort,
-                createdAt: i.created_at || i.createdAt,
+                createdAt: i.created_at,
+                // labUserId: i.lab_user_id, // Add if needed
                 labUserId: i.lab_user_id,
+                operatorId: i.operator_id,
                 batchId: i.batch_id
             }));
         } catch (e) {
-            console.error("API Fetch Failed, falling back to local", e);
+            console.error("Supabase Fetch Failed, falling back to local", e);
+            // Optional: fallback to local if offline? 
+            // For now, let's mix: if fetch fails, maybe return local? 
+            // Or better: just alert error? Let's return local for safety.
             return this.getItemsLocal();
         }
     },
@@ -72,7 +80,8 @@ export const ProductionService = {
         this.syncHistoryToLocal(items);
 
         if (items.length === 0) {
-            return this.generateMockData();
+            // return this.generateMockData();
+            return [];
         }
 
         return items.sort((a, b) => b.serialNumber - a.serialNumber);
@@ -104,7 +113,7 @@ export const ProductionService = {
                         hasNew = true;
 
                         // NEW: If API is valid, try to push this new item to server immediately
-                        if (USE_API) this.postItemToApi(newItem);
+                        if (USE_SUPABASE) this.postItemToApi(newItem);
                     }
                 });
                 if (hasNew) {
@@ -115,14 +124,35 @@ export const ProductionService = {
         } catch (e) { console.error(e); }
     },
 
+
     async postItemToApi(item: ProductionItem) {
+        if (!USE_SUPABASE || !supabase) return;
+
         try {
-            await fetch(`${API_URL}/items`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(item)
-            });
-        } catch (e) { console.error("Failed to POST item to API", e); }
+            const dbItem = {
+                serial_number: item.serialNumber,
+                product_name: item.productName,
+                product_name_en: item.productNameEn,
+                weight: item.weight,
+                date: item.date,
+                status: item.status,
+                sort: item.sort,
+                barcode: item.barcode,
+                created_at: item.createdAt || new Date().toISOString(),
+                operator_id: item.operatorId
+            };
+
+            const { data, error } = await supabase
+                .from('production_items')
+                .upsert(dbItem, { onConflict: 'serial_number, product_name, date' }) // Prevent duplicates
+                .select();
+
+            if (error) {
+                console.error("Supabase UPSERT Error:", error);
+            } else {
+                console.log("Supabase Saved:", data);
+            }
+        } catch (e) { console.error("Failed to POST item to Supabase", e); }
     },
 
     saveItemsLocal(items: ProductionItem[]) {
@@ -159,21 +189,22 @@ export const ProductionService = {
     },
 
     async palletizeItems(ids: string[], batchId: string): Promise<void> {
-        if (USE_API) {
+        if (USE_SUPABASE && supabase) {
             try {
-                await Promise.all(ids.map(id =>
-                    fetch(`${API_URL}/items/${id}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            status: 'palletized',
-                            batchId: batchId,
-                            palletizedAt: new Date().toISOString()
-                        })
+                // Bulk update status to 'palletized'
+                const { error } = await supabase
+                    .from('production_items')
+                    .update({
+                        status: 'palletized',
+                        batch_id: batchId,
+                        // palletizedAt: new Date().toISOString() // Not in schema, relying on updated_at? Or maybe we missed it. 
+                        // Schema has updated_at.
                     })
-                ));
+                    .in('id', ids);
+
+                if (error) console.error("Supabase Palletize Error", error);
                 return;
-            } catch (e) { console.error("API Palletize Failed", e); }
+            } catch (e) { console.error("Supabase Palletize Failed", e); }
         }
 
         // Fallback Local
@@ -198,22 +229,89 @@ export const ProductionService = {
         }
     },
 
-    async unpalletizeItems(ids: string[]): Promise<void> {
-        if (USE_API) {
+    // 🧪 BETA: Update production item when operator edits history entry
+    async updateItemFromHistory(oldEntry: any, newEntry: any): Promise<void> {
+        if (USE_SUPABASE && supabase) {
             try {
-                await Promise.all(ids.map(id =>
-                    fetch(`${API_URL}/items/${id}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            status: 'graded',
-                            batchId: null,
-                            palletizedAt: null
-                        })
+                // We need to match by identifying fields: serial, product_name, date
+                // AND status must be 'created' (to be safe)
+
+                const { error, data } = await supabase
+                    .from('production_items')
+                    .update({
+                        weight: parseFloat(newEntry.weight),
+                        product_name: newEntry.product?.name,
+                        product_name_en: newEntry.product?.name_en,
+                        serial_number: newEntry.serialNumber,
+                        barcode: newEntry.barcode
                     })
-                ));
+                    .eq('serial_number', oldEntry.serialNumber)
+                    .eq('product_name', oldEntry.product?.name)
+                    .eq('date', oldEntry.date)
+                    .eq('status', 'created') // Safety check
+                    .select();
+
+                if (error) console.error("Supabase Update From History Error", error);
+                else console.log("Supabase Updated Item:", data);
+
+                if (data && data.length === 0) {
+                    console.warn("Supabase: No item found to update or status was not 'created'");
+                    // Optional: Alert user?
+                }
                 return;
-            } catch (e) { console.error("API Unpalletize Failed", e); }
+            } catch (e) { console.error("Supabase Update Failed", e); }
+        }
+
+        // Fallback Local
+        // Find matching production item by serial + product + date
+        const items = this.getItemsLocal();
+        const idx = items.findIndex(i =>
+            i.serialNumber === oldEntry.serialNumber &&
+            i.productName === oldEntry.product?.name &&
+            i.date === oldEntry.date
+        );
+
+        if (idx === -1) {
+            console.warn('[BETA] Production item not found for history entry', oldEntry);
+            return;
+        }
+
+        // Only allow edits if status is 'created' (not yet processed by lab)
+        if (items[idx].status !== 'created') {
+            console.warn('[BETA] Cannot edit item with status:', items[idx].status);
+            alert('Неможливо редагувати: цей бейл вже оброблено лабораторією');
+            return;
+        }
+
+        // Update the item
+        items[idx] = {
+            ...items[idx],
+            weight: parseFloat(newEntry.weight),
+            productName: newEntry.product?.name || items[idx].productName,
+            productNameEn: newEntry.product?.name_en || items[idx].productNameEn,
+            serialNumber: newEntry.serialNumber,
+            barcode: newEntry.barcode || items[idx].barcode
+        };
+
+        this.saveItemsLocal(items);
+        console.log('[BETA] Updated production item:', items[idx]);
+    },
+
+    async unpalletizeItems(ids: string[]): Promise<void> {
+        if (USE_SUPABASE && supabase) {
+            try {
+                const { error } = await supabase
+                    .from('production_items')
+                    .update({
+                        status: 'graded',
+                        batch_id: null,
+                        // palletizedAt: null 
+                    })
+                    .in('id', ids);
+
+                if (error) console.error("Supabase Unpalletize Error", error);
+                return;
+            } catch (e) { console.error("Supabase Unpalletize Failed", e); }
         }
 
         // Fallback Local
@@ -239,21 +337,16 @@ export const ProductionService = {
     },
 
     async shipItems(ids: string[]): Promise<void> {
-        if (USE_API) {
+        if (USE_SUPABASE && supabase) {
             try {
-                // Batch update or individual updates
-                await Promise.all(ids.map(id =>
-                    fetch(`${API_URL}/items/${id}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            status: 'shipped',
-                            shippedAt: new Date().toISOString()
-                        })
-                    })
-                ));
+                const { error } = await supabase
+                    .from('production_items')
+                    .update({ status: 'shipped' })
+                    .in('id', ids);
+
+                if (error) console.error("Supabase Ship Error", error);
                 return;
-            } catch (e) { console.error("API Ship Failed", e); }
+            } catch (e) { console.error("Supabase Ship Failed", e); }
         }
 
         // Fallback Local
@@ -278,17 +371,40 @@ export const ProductionService = {
     },
 
     async gradeItem(id: string, sort: string, userId: string): Promise<ProductionItem> {
-        if (USE_API) {
+        if (USE_SUPABASE && supabase) {
             try {
-                const res = await fetch(`${API_URL}/items/${id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: 'graded', sort, labUserId: userId })
-                });
-                if (res.ok) {
-                    return await res.json(); // Return updated item
-                }
-            } catch (e) { console.error("API Grade Failed", e); }
+                const { data, error } = await supabase
+                    .from('production_items')
+                    .update({
+                        status: 'graded',
+                        sort: sort,
+                        lab_user_id: userId,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', id)
+                    .select()
+                    .single();
+
+                if (error) throw error;
+
+                // Return mapped item
+                return {
+                    id: data.id,
+                    serialNumber: data.serial_number,
+                    productName: data.product_name,
+                    productNameEn: data.product_name_en,
+                    weight: data.weight,
+                    date: data.date,
+                    status: data.status,
+                    sort: data.sort,
+                    barcode: data.barcode,
+                    createdAt: data.created_at,
+                    updatedAt: data.updated_at
+                };
+            } catch (e) {
+                console.error("Supabase Grade Failed", e);
+                throw e; // Propagate error so UI knows
+            }
         }
 
         // Fallback Local
@@ -309,20 +425,21 @@ export const ProductionService = {
     },
 
     async revertGrade(id: string): Promise<void> {
-        if (USE_API) {
+        if (USE_SUPABASE && supabase) {
             try {
-                await fetch(`${API_URL}/items/${id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
+                const { error } = await supabase
+                    .from('production_items')
+                    .update({
                         status: 'created',
                         sort: null,
-                        gradedAt: null,
-                        labUserId: null
+                        lab_user_id: null,
+                        updated_at: new Date().toISOString()
                     })
-                });
+                    .eq('id', id);
+
+                if (error) throw error;
                 return;
-            } catch (e) { console.error("API Revert Failed", e); }
+            } catch (e) { console.error("Supabase Revert Failed", e); }
         }
 
         // Fallback Local
@@ -348,15 +465,35 @@ export const ProductionService = {
     },
 
     async createItem(item: ProductionItem): Promise<ProductionItem> {
-        if (USE_API) {
+        if (USE_SUPABASE && supabase) {
             try {
-                const res = await fetch(`${API_URL}/items`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(item)
-                });
-                if (res.ok) return await res.json();
-            } catch (e) { console.error("API Create Failed", e); }
+                const dbItem = {
+                    serial_number: item.serialNumber,
+                    product_name: item.productName,
+                    product_name_en: item.productNameEn,
+                    weight: item.weight,
+                    date: item.date,
+                    status: item.status,
+                    sort: item.sort,
+                    barcode: item.barcode,
+                    created_at: item.createdAt || new Date().toISOString(),
+                    operator_id: item.operatorId
+                };
+
+                const { data, error } = await supabase
+                    .from('production_items')
+                    .upsert(dbItem, { onConflict: 'serial_number, product_name, date' })
+                    .select()
+                    .single();
+
+                if (error) throw error;
+
+                return {
+                    ...item,
+                    id: data.id, // Update with real ID from DB
+                    createdAt: data.created_at
+                };
+            } catch (e) { console.error("Supabase Create Failed", e); }
         }
 
         // Fallback Local

@@ -1,69 +1,85 @@
 import { User } from '../types';
-import { USERS as DEFAULT_USERS } from '../constants'; // Fallback/Initial
-
-const STORAGE_KEY = 'zebra_users_v1';
+import { USERS as DEFAULT_USERS } from '../constants';
+import { supabase } from './supabaseClient';
 
 export const UserService = {
-    getUsers(): User[] {
+    // --- Async Actions ---
+
+    async getUsers(): Promise<User[]> {
         try {
-            const data = localStorage.getItem(STORAGE_KEY);
-            if (data) {
-                return JSON.parse(data);
+            const { data, error } = await supabase
+                .from('users')
+                .select('*')
+                .order('name');
+
+            if (error) throw error;
+            if (!data || data.length === 0) {
+                // If DB is empty, maybe seed it? Or just return defaults locally?
+                // Let's seed with defaults if genuinely empty to help bootstrapping
+                // BUT be careful not to overwrite if it's just a network error (caught above)
+                return DEFAULT_USERS;
             }
+            // Map DB fields if necessary (assuming DB columns match User type)
+            // User type: { id, name, role, pin }
+            return data as User[];
         } catch (e) {
-            console.error("Failed to load users", e);
-        }
-
-        // Initialize with defaults if empty
-        this.saveUsers(DEFAULT_USERS);
-        return DEFAULT_USERS;
-    },
-
-    saveUsers(users: User[]) {
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
-        } catch (e) {
-            console.error("Failed to save users", e);
+            console.error("Supabase: Failed to load users", e);
+            return DEFAULT_USERS; // Fallback to local constants
         }
     },
 
-    addUser(user: User): User[] {
-        const users = this.getUsers();
-        // Simple distinct check by ID or Name
-        if (users.some(u => u.id === user.id || u.name === user.name)) {
-            throw new Error("User with this ID or Name already exists");
+    async addUser(user: User): Promise<User[]> {
+        // Check for duplicates (by name, since ID might be auto-gen or provided)
+        const { data: existing } = await supabase
+            .from('users')
+            .select('id')
+            .eq('name', user.name)
+            .single();
+
+        if (existing) {
+            throw new Error("User with this name already exists");
         }
-        const newUsers = [...users, user];
-        this.saveUsers(newUsers);
-        return newUsers;
+
+        const { error } = await supabase
+            .from('users')
+            .insert([user]);
+
+        if (error) throw error;
+
+        return this.getUsers();
     },
 
-    updateUser(updatedUser: User): User[] {
-        const users = this.getUsers();
-        const idx = users.findIndex(u => u.id === updatedUser.id);
-        if (idx === -1) throw new Error("User not found");
+    async updateUser(user: User): Promise<User[]> {
+        const { error } = await supabase
+            .from('users')
+            .update(user)
+            .eq('id', user.id);
 
-        const newUsers = [...users];
-        newUsers[idx] = updatedUser;
-        this.saveUsers(newUsers);
-        return newUsers;
+        if (error) throw error;
+
+        return this.getUsers();
     },
 
-    deleteUser(userId: string): User[] {
-        const users = this.getUsers();
-        const newUsers = users.filter(u => u.id !== userId);
-        this.saveUsers(newUsers);
-        return newUsers;
+    async deleteUser(userId: string): Promise<User[]> {
+        const { error } = await supabase
+            .from('users')
+            .delete()
+            .eq('id', userId);
+
+        if (error) throw error;
+
+        return this.getUsers();
     },
 
-    // Helper to get roles
     getRoles() {
         return [
             { id: 'operator', name: 'Оператор' },
             { id: 'lab', name: 'Лабораторія' },
             { id: 'accountant', name: 'Обліковець' },
+            { id: 'report', name: 'Звіт' },
             { id: 'admin', name: 'Адміністратор' },
-            { id: 'agro', name: 'Агроном' },
+            { id: 'postgres_user', name: 'Postgres Test (Dev)' },
         ];
     }
 };
+

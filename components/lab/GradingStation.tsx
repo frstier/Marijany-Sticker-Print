@@ -46,11 +46,12 @@ export default function GradingStation({ onClose, currentUserId }: GradingStatio
         }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!scannedData || !selectedSort) return;
 
         try {
-            GradingService.saveGrade(scannedData.raw, selectedSort, currentUserId);
+            await GradingService.saveGrade(scannedData.raw, selectedSort, currentUserId);
+
             setSuccessMsg(`Бейл №${scannedData.serial} збережено як "${selectedSort}"`);
 
             // Reset for next

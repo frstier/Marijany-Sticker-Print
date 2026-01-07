@@ -81,16 +81,22 @@ export const SupabaseService: IDataService & { updateCredentials: (u: string, k:
             return [];
         }
         return data.map((row: any) => ({
+            id: row.id, // Required for update/delete
             date: row.created_at, // Map Supabase timestamp to date string
             product: { name: row.product_name, sku: row.sku, id: '0' },
             weight: row.weight,
             serialNumber: row.serial_number,
             sortLabel: row.sort_label,
-            sortValue: row.sort_value
+            sortValue: row.sort_value,
+            status: row.status || 'ok',
+            barcode: row.barcode,
+            operatorId: row.operator_id, // Required for ownership check
+            operatorName: row.operator_name,
+            timestamp: row.created_at
         })) as unknown as LabelData[];
     },
 
-    async addToHistory(entry: LabelData & { timestamp?: string }): Promise<void> {
+    async addToHistory(entry: LabelData & { timestamp?: string; operatorId?: string; operatorName?: string }): Promise<void> {
         if (!supabase) return;
 
         const payload = {
@@ -101,6 +107,9 @@ export const SupabaseService: IDataService & { updateCredentials: (u: string, k:
             sort_label: entry.sortLabel,
             sort_value: entry.sortValue,
             status: entry.status || 'ok',
+            barcode: entry.barcode,
+            operator_id: entry.operatorId,
+            operator_name: entry.operatorName,
             created_at: entry.timestamp || new Date().toISOString()
         };
 
@@ -133,5 +142,35 @@ export const SupabaseService: IDataService & { updateCredentials: (u: string, k:
             sortLabel: row.sort_label,
             sortValue: row.sort_value
         })) as unknown as LabelData[];
+    },
+
+    async updateHistoryEntry(entry: LabelData & { id?: string }): Promise<void> {
+        if (!supabase || !entry.id) return;
+
+        const { error } = await supabase
+            .from('history')
+            .update({
+                weight: entry.weight,
+                sort_label: entry.sortLabel,
+                sort_value: entry.sortValue
+            })
+            .eq('id', entry.id);
+
+        if (error) {
+            console.error("Supabase Update Error:", error);
+            throw error;
+        }
+        console.log('✅ Updated in Supabase history:', entry.id);
+    },
+
+    async deleteHistoryEntry(id: string): Promise<void> {
+        if (!supabase) return;
+
+        const { error } = await supabase.from('history').delete().eq('id', id);
+        if (error) {
+            console.error("Supabase Delete Error:", error);
+            throw error;
+        }
+        console.log('✅ Deleted from Supabase history:', id);
     }
 };

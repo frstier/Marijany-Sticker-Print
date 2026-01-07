@@ -23,6 +23,7 @@ import { Product, User } from '../../types';
 import AnalyticsDashboard from '../AnalyticsDashboard';
 import AuditLogViewer from '../AuditLogViewer';
 import QRScanner from '../QRScanner';
+import LabelDesigner from '../LabelDesigner';
 
 export default function AdminInterface() {
     const { logout, currentUser } = useAuth();
@@ -31,7 +32,12 @@ export default function AdminInterface() {
     const [activeTab, setActiveTab] = useState<'printer' | 'database' | 'reports' | 'system' | 'users'>('printer');
 
     // Users State
-    const [usersList, setUsersList] = useState<User[]>(() => UserService.getUsers());
+    const [usersList, setUsersList] = useState<User[]>([]);
+
+    React.useEffect(() => {
+        UserService.getUsers().then(setUsersList);
+    }, []);
+
     const [newUser, setNewUser] = useState<User>({ id: '', name: '', role: 'operator', pin: '' });
 
     // State for local settings (mirrored from SettingsModal logic)
@@ -54,6 +60,7 @@ export default function AdminInterface() {
     const [showAnalytics, setShowAnalytics] = useState(false);
     const [showAuditLog, setShowAuditLog] = useState(false);
     const [showQRScanner, setShowQRScanner] = useState(false);
+    const [showLabelDesigner, setShowLabelDesigner] = useState(false);
 
     const handleLogoutClick = () => {
         if (logoutConfirm) {
@@ -155,6 +162,14 @@ export default function AdminInterface() {
                             label="Система"
                             icon={<SettingsIcon />}
                         />
+                        <div className="border-t border-slate-200 my-3" />
+                        <button
+                            onClick={() => setShowLabelDesigner(true)}
+                            className="w-full flex items-center gap-3 p-3 rounded-xl text-left bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 hover:border-purple-300 transition-all"
+                        >
+                            <span className="text-xl">🎨</span>
+                            <span className="font-medium text-purple-700">Редактор Етикеток</span>
+                        </button>
                     </nav>
                     <div className="p-4 bg-slate-50 border-t text-xs text-slate-400 text-center">
                         v0.9 beta
@@ -426,6 +441,30 @@ export default function AdminInterface() {
                                     </p>
                                 </div>
                             )}
+
+                            {/* DANGER ZONE */}
+                            <div className="bg-red-50 p-6 rounded-2xl border-2 border-red-100 mt-8">
+                                <h3 className="text-red-800 font-bold mb-4 flex items-center gap-2">
+                                    <span>☢️</span> НЕБЕЗПЕЧНА ЗОНА
+                                </h3>
+                                <p className="text-red-700 text-sm mb-4">
+                                    Ці дії призводять до повної втрати даних. Будьте обережні.
+                                </p>
+                                <button
+                                    onClick={() => {
+                                        if (confirm("ВИ ВПЕВНЕНІ?\n\nЦе видалить ВСІ дані (історію, палети, бейли) з цього пристрою.\n\nЦю дію неможливо відмінити!")) {
+                                            if (confirm("Точно видалити все?")) {
+                                                localStorage.clear();
+                                                alert("Всі дані видалено. Сторінка буде перезавантажена.");
+                                                window.location.reload();
+                                            }
+                                        }
+                                    }}
+                                    className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-red-500/30 w-full flex items-center justify-center gap-2"
+                                >
+                                    🗑️ ПОВНЕ ОЧИЩЕННЯ БАЗИ ДАНИХ
+                                </button>
+                            </div>
                         </div>
                     )}
 
@@ -568,9 +607,10 @@ export default function AdminInterface() {
                                                             ✏️ Ред.
                                                         </button>
                                                         <button
-                                                            onClick={() => {
+                                                            onClick={async () => {
                                                                 if (window.confirm(`Видалити користувача ${u.name}?`)) {
-                                                                    setUsersList(UserService.deleteUser(u.id));
+                                                                    const updated = await UserService.deleteUser(u.id);
+                                                                    setUsersList(updated);
                                                                     if (newUser.id === u.id) {
                                                                         setNewUser({ id: '', name: '', role: 'operator', pin: '' });
                                                                     }
@@ -627,19 +667,21 @@ export default function AdminInterface() {
                                 </div>
                                 <div className="flex gap-3">
                                     <button
-                                        onClick={() => {
+                                        onClick={async () => {
                                             if (newUser.name && newUser.pin.length === 4) {
                                                 try {
+                                                    let updatedList;
                                                     if (newUser.id) {
                                                         // Update existing
-                                                        setUsersList(UserService.updateUser(newUser));
+                                                        updatedList = await UserService.updateUser(newUser);
                                                         alert('Дані оновлено!');
                                                     } else {
-                                                        // Create new
-                                                        const created = { ...newUser, id: Date.now().toString() };
-                                                        setUsersList(UserService.addUser(created));
+                                                        // Create new with UUID
+                                                        const created = { ...newUser, id: crypto.randomUUID() };
+                                                        updatedList = await UserService.addUser(created);
                                                         alert('Користувача додано!');
                                                     }
+                                                    setUsersList(updatedList);
                                                     setNewUser({ id: '', name: '', role: 'operator', pin: '' });
                                                 } catch (e: any) {
                                                     alert(e.message);
@@ -799,7 +841,11 @@ export default function AdminInterface() {
                     setShowQRScanner(false);
                 }}
             />
+            {showLabelDesigner && (
+                <LabelDesigner onClose={() => setShowLabelDesigner(false)} printer={printerData.printer} />
+            )}
         </div>
+
     );
 }
 

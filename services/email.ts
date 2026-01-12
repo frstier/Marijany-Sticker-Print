@@ -29,7 +29,7 @@ export const EmailService = {
     },
 
     // Sending
-    sendReport: async (reportData: LabelData[], userEmail: string = '') => {
+    sendReport: async (reportData: LabelData[], userEmail: string = '', attachment?: File) => {
         const config = EmailService.getConfig();
         if (!config.serviceId || !config.templateId || !config.publicKey) {
             throw new Error("EmailJS not configured");
@@ -58,7 +58,7 @@ export const EmailService = {
             `${new Date(item.date).toLocaleTimeString('uk-UA')} | ${item.product?.name} | ${item.weight}kg | ${item.serialNumber}`
         ).join('\n');
 
-        const templateParams = {
+        const templateParams: any = {
             to_email: userEmail,
             date: dateStr,
             full_date: new Date().toLocaleString('uk-UA'),
@@ -68,6 +68,25 @@ export const EmailService = {
             report_details: tableRows, // Ensure template has {{report_details}}
             message: `${summary}\n\nДеталі:\n${tableRows}`
         };
+
+        if (attachment) {
+            try {
+                const reader = new FileReader();
+                const base64Promise = new Promise<string>((resolve, reject) => {
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(attachment);
+                });
+                const base64Content = await base64Promise;
+                // EmailJS requires 'content' key for attachments in some configurations, 
+                // or just passing it as a variable if the template uses it.
+                // We will pass it as 'content' and 'attachment_name'.
+                templateParams.content = base64Content;
+                templateParams.attachment_name = attachment.name;
+            } catch (e) {
+                console.warn('Failed to process attachment for EmailJS', e);
+            }
+        }
 
         try {
             const response = await emailjs.send(

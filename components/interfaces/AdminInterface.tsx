@@ -24,6 +24,9 @@ import AnalyticsDashboard from '../AnalyticsDashboard';
 import AuditLogViewer from '../AuditLogViewer';
 import QRScanner from '../QRScanner';
 import LabelDesigner from '../LabelDesigner';
+import ConfirmDialog from '../ConfirmDialog';
+// import ExcelImportModal from '../modals/ExcelImportModal'; // MOVED TO RECEIVING
+// import PrintHubModal from '../modals/PrintHubModal'; // MOVED TO RECEIVING
 
 export default function AdminInterface() {
     const { logout, currentUser } = useAuth();
@@ -62,6 +65,12 @@ export default function AdminInterface() {
     const [showQRScanner, setShowQRScanner] = useState(false);
     const [showLabelDesigner, setShowLabelDesigner] = useState(false);
 
+    // Delete User Confirmation Dialog State
+    const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; user: User | null }>({ isOpen: false, user: null });
+
+    // const [excelImportOpen, setExcelImportOpen] = useState(false); // MOVED
+    // const [printHubOpen, setPrintHubOpen] = useState(false); // MOVED
+
     const handleLogoutClick = () => {
         if (logoutConfirm) {
             logout();
@@ -98,8 +107,80 @@ export default function AdminInterface() {
         setIsGeneratingReport(false);
     };
 
+    const handlePrint = () => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            alert('Не вдалося відкрити вікно друку. Перевірте налаштування браузера.');
+            return;
+        }
+
+        const items = historyData.reportData;
+
+        // Generate Table Rows
+        const rows = items.map(item => `
+            <tr>
+                <td>${item.date ? new Date(item.date).toLocaleDateString('uk-UA') : ''}</td>
+                <td style="font-family: monospace;">${item.barcode || ''}</td>
+                <td>${item.serialNumber}</td>
+                <td>${item.product?.name || ''}</td>
+                <td style="text-align: right;">${item.weight} кг</td>
+                <td>${item.sortLabel || item.sortValue || '-'}</td>
+            </tr>
+        `).join('');
+
+        printWindow.document.write(`
+            <html>
+            <head>
+                <title>Звіт лабораторії</title>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; }
+                    h1 { text-align: center; font-size: 24px; margin-bottom: 20px; text-transform: uppercase; }
+                    .meta { text-align: center; font-size: 14px; margin-bottom: 30px; color: #555; }
+                    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                    th, td { border: 1px solid #000; padding: 6px 10px; text-align: left; }
+                    th { background-color: #f2f2f2; font-weight: bold; text-align: center; }
+                    @media print {
+                        .no-print { display: none; }
+                        @page { margin: 10mm; }
+                    }
+                </style>
+            </head>
+            <body>
+                <h1>Звіт Лабораторії</h1>
+                <div class="meta">за ${startDate} ${startDate !== endDate ? ' - ' + endDate : ''}</div>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Дата</th>
+                            <th>UID</th>
+                            <th>№</th>
+                            <th>Продукт</th>
+                            <th>Вага (кг)</th>
+                            <th>Сорт</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+                <div style="margin-top: 20px; font-size: 12px; text-align: right;">
+                    Всього: <strong>${historyData.reportSummary.count}</strong> шт. | Вага: <strong>${historyData.reportSummary.totalWeight.toFixed(2)}</strong> кг
+                </div>
+            </body>
+            </html>
+        `);
+
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => {
+            printWindow.print();
+            printWindow.close();
+        }, 500);
+    };
+
     return (
-        <div className="min-h-screen bg-slate-100 flex flex-col">
+        <div className="min-h-screen bg-[var(--bg-primary)] flex flex-col">
             {/* Top Bar */}
             <header className="bg-[#115740] text-white p-4 shadow-md flex justify-between items-center sticky top-0 z-50">
                 <div className="flex items-center gap-3">
@@ -130,7 +211,7 @@ export default function AdminInterface() {
             <div className="flex flex-1 overflow-hidden max-w-7xl mx-auto w-full p-4 gap-6">
 
                 {/* Sidebar Navigation */}
-                <aside className="w-64 bg-white rounded-2xl shadow-sm flex flex-col overflow-hidden shrink-0">
+                <aside className="w-64 bg-[var(--bg-card)] rounded-2xl shadow-sm flex flex-col overflow-hidden shrink-0">
                     <nav className="flex-1 p-4 space-y-2">
                         <NavButton
                             active={activeTab === 'printer'}
@@ -171,33 +252,33 @@ export default function AdminInterface() {
                             <span className="font-medium text-purple-700">Редактор Етикеток</span>
                         </button>
                     </nav>
-                    <div className="p-4 bg-slate-50 border-t text-xs text-slate-400 text-center">
+                    <div className="p-4 bg-[var(--bg-tertiary)] border-t border-[var(--border-color)] text-xs text-[var(--text-muted)] text-center">
                         v0.9 beta
                     </div>
                 </aside>
 
                 {/* Main Content Area */}
-                <main className="flex-1 bg-white rounded-2xl shadow-sm overflow-y-auto p-6 relative">
+                <main className="flex-1 bg-[var(--bg-card)] rounded-2xl shadow-sm overflow-y-auto p-6 relative">
 
                     {/* PRINTER TAB */}
                     {activeTab === 'printer' && (
                         <div className="space-y-6 max-w-3xl">
-                            <h2 className="text-2xl font-bold text-slate-800 border-b pb-4 mb-6">Налаштування Друку</h2>
+                            <h2 className="text-2xl font-bold text-[var(--text-primary)] border-b border-[var(--border-color)] pb-4 mb-6">Налаштування Друку</h2>
 
                             {/* Current Status */}
-                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                <div className="text-sm text-slate-500 uppercase font-bold mb-2">Активний принтер</div>
+                            <div className="bg-[var(--bg-tertiary)] p-4 rounded-xl border border-[var(--border-color)]">
+                                <div className="text-sm text-[var(--text-muted)] uppercase font-bold mb-2">Активний принтер</div>
                                 {printerData?.printer ? (
                                     <div className="flex items-center gap-3">
                                         <div className="w-4 h-4 rounded-full bg-green-500 animate-pulse"></div>
                                         <div>
-                                            <div className="font-bold text-lg text-slate-800">{printerData.printer.name}</div>
-                                            <div className="text-sm text-slate-500 font-mono">{printerData.printer.uid} ({printerData.printer.connection})</div>
+                                            <div className="font-bold text-lg text-[var(--text-primary)]">{printerData.printer.name}</div>
+                                            <div className="text-sm text-[var(--text-secondary)] font-mono">{printerData.printer.uid} ({printerData.printer.connection})</div>
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="flex items-center gap-3 text-slate-400">
-                                        <div className="w-4 h-4 rounded-full bg-slate-300"></div>
+                                    <div className="flex items-center gap-3 text-[var(--text-muted)]">
+                                        <div className="w-4 h-4 rounded-full bg-[var(--text-muted)]"></div>
                                         <span className="font-medium">Принтер не підключено</span>
                                     </div>
                                 )}
@@ -205,12 +286,12 @@ export default function AdminInterface() {
 
                             {/* Discovery */}
                             <section>
-                                <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2">
+                                <h3 className="font-bold text-[var(--text-secondary)] mb-3 flex items-center gap-2">
                                     <SearchIcon /> Пошук Принтерів (Browser Print)
                                 </h3>
                                 <div className="flex gap-2 mb-4">
                                     <input
-                                        className="border-2 border-slate-200 rounded-lg px-3 py-2 text-sm flex-1 focus:border-blue-500 outline-none"
+                                        className="border-2 border-[var(--border-color)] bg-[var(--bg-input)] rounded-lg px-3 py-2 text-sm flex-1 focus:border-blue-500 outline-none text-[var(--text-primary)]"
                                         value={agentIp || '127.0.0.1'}
                                         onChange={(e) => setAgentIp(e.target.value)}
                                         placeholder="IP агента (127.0.0.1)"
@@ -229,17 +310,17 @@ export default function AdminInterface() {
                                         <div
                                             key={device.uid}
                                             onClick={() => selectPrinter(device)}
-                                            className="bg-white p-3 border border-slate-200 rounded-xl flex justify-between items-center cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-all shadow-sm"
+                                            className="bg-[var(--bg-card)] p-3 border border-[var(--border-color)] rounded-xl flex justify-between items-center cursor-pointer hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all shadow-sm"
                                         >
                                             <div>
-                                                <div className="font-bold text-slate-800">{device.name}</div>
-                                                <div className="text-xs text-slate-500 font-mono">{device.uid}</div>
+                                                <div className="font-bold text-[var(--text-primary)]">{device.name}</div>
+                                                <div className="text-xs text-[var(--text-muted)] font-mono">{device.uid}</div>
                                             </div>
                                             <div className="bg-blue-100 text-blue-700 text-xs font-bold px-3 py-1 rounded-full uppercase">Вибрати</div>
                                         </div>
                                     ))}
                                     {discoveredPrinters.length === 0 && !isSearchingPrinters && (
-                                        <div className="text-slate-400 text-center py-4 border-2 border-dashed border-slate-200 rounded-xl">
+                                        <div className="text-[var(--text-muted)] text-center py-4 border-2 border-dashed border-[var(--border-color)] rounded-xl">
                                             Принтерів не знайдено. Перевірте Zebra Browser Print.
                                         </div>
                                     )}
@@ -247,15 +328,15 @@ export default function AdminInterface() {
                             </section>
 
                             {/* Manual LAN */}
-                            <section className="pt-6 border-t border-slate-100">
-                                <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2">
+                            <section className="pt-6 border-t border-[var(--border-color)]">
+                                <h3 className="font-bold text-[var(--text-secondary)] mb-3 flex items-center gap-2">
                                     <LockClosedIcon /> Ручне підключення (LAN Direct)
                                 </h3>
                                 <div className="flex gap-2">
                                     <input
                                         type="text"
                                         id="manual-ip-input"
-                                        className="border-2 border-slate-200 rounded-lg px-3 py-2 text-sm flex-1 font-mono focus:border-slate-500 outline-none"
+                                        className="border-2 border-[var(--border-color)] bg-[var(--bg-input)] rounded-lg px-3 py-2 text-sm flex-1 font-mono focus:border-[var(--text-secondary)] outline-none text-[var(--text-primary)]"
                                         placeholder="192.168.1.xxx"
                                         defaultValue="10.10.10.163"
                                     />
@@ -288,29 +369,29 @@ export default function AdminInterface() {
                     {/* DATABASE TAB */}
                     {activeTab === 'database' && (
                         <div className="space-y-8 max-w-3xl">
-                            <h2 className="text-2xl font-bold text-slate-800 border-b pb-4 mb-6">База Даних</h2>
+                            <h2 className="text-2xl font-bold text-[var(--text-primary)] border-b border-[var(--border-color)] pb-4 mb-6">База Даних</h2>
 
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div
                                     onClick={() => { DataManager.setDataSource('sqlite'); setDataSource('sqlite'); }}
-                                    className={`p-6 rounded-2xl border-2 cursor-pointer transition-all ${dataSource === 'sqlite' ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-slate-200 hover:border-slate-300'}`}
+                                    className={`p-6 rounded-2xl border-2 cursor-pointer transition-all ${dataSource === 'sqlite' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-200' : 'border-[var(--border-color)] hover:border-[var(--text-muted)]'}`}
                                 >
-                                    <div className="text-xl font-bold mb-2">Local SQLite</div>
-                                    <p className="text-sm text-slate-500">Локальна база даних на пристрої. Працює офлайн.</p>
+                                    <div className="text-xl font-bold mb-2 text-[var(--text-primary)]">Local SQLite</div>
+                                    <p className="text-sm text-[var(--text-secondary)]">Локальна база даних на пристрої. Працює офлайн.</p>
                                 </div>
                                 <div
                                     onClick={() => { DataManager.setDataSource('supabase'); setDataSource('supabase'); }}
-                                    className={`p-6 rounded-2xl border-2 cursor-pointer transition-all ${dataSource === 'supabase' ? 'border-green-500 bg-green-50 ring-2 ring-green-200' : 'border-slate-200 hover:border-slate-300'}`}
+                                    className={`p-6 rounded-2xl border-2 cursor-pointer transition-all ${dataSource === 'supabase' ? 'border-green-500 bg-green-50 dark:bg-green-900/20 ring-2 ring-green-200' : 'border-[var(--border-color)] hover:border-[var(--text-muted)]'}`}
                                 >
-                                    <div className="text-xl font-bold mb-2">Cloud Supabase</div>
-                                    <p className="text-sm text-slate-500">Хмарна синхронізація. Потребує інтернет.</p>
+                                    <div className="text-xl font-bold mb-2 text-[var(--text-primary)]">Cloud Supabase</div>
+                                    <p className="text-sm text-[var(--text-secondary)]">Хмарна синхронізація. Потребує інтернет.</p>
                                 </div>
                                 <div
                                     onClick={() => { DataManager.setDataSource('postgres'); setDataSource('postgres'); }}
-                                    className={`p-6 rounded-2xl border-2 cursor-pointer transition-all ${dataSource === 'postgres' ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200' : 'border-slate-200 hover:border-slate-300'}`}
+                                    className={`p-6 rounded-2xl border-2 cursor-pointer transition-all ${dataSource === 'postgres' ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 ring-2 ring-indigo-200' : 'border-[var(--border-color)] hover:border-[var(--text-muted)]'}`}
                                 >
-                                    <div className="text-xl font-bold mb-2">PostgreSQL (API)</div>
-                                    <p className="text-sm text-slate-500">Підключення через API сервер (Node.js).</p>
+                                    <div className="text-xl font-bold mb-2 text-[var(--text-primary)]">PostgreSQL (API)</div>
+                                    <p className="text-sm text-[var(--text-secondary)]">Підключення через API сервер (Node.js).</p>
                                 </div>
                             </div>
 
@@ -374,8 +455,8 @@ export default function AdminInterface() {
                             )}
 
                             {dataSource === 'sqlite' && (
-                                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
-                                    <h3 className="font-bold text-slate-700 mb-4">Резервне копіювання та Відновлення</h3>
+                                <div className="bg-[var(--bg-tertiary)] p-6 rounded-2xl border border-[var(--border-color)]">
+                                    <h3 className="font-bold text-[var(--text-secondary)] mb-4">Резервне копіювання та Відновлення</h3>
 
                                     <div className="flex flex-col md:flex-row gap-4">
                                         {/* Export */}
@@ -392,7 +473,7 @@ export default function AdminInterface() {
                                             </div>
                                         </button>
 
-                                        {/* Import */}
+                                        {/* Import DB */}
                                         <div className="flex-1 relative">
                                             <input
                                                 type="file"
@@ -435,8 +516,10 @@ export default function AdminInterface() {
                                                 </div>
                                             </label>
                                         </div>
+
                                     </div>
-                                    <p className="text-xs text-slate-400 mt-4 text-center">
+
+                                    <p className="text-xs text-[var(--text-muted)] mt-4 text-center">
                                         Формат файлу: JSON. Імпорт повністю замінює дані.
                                     </p>
                                 </div>
@@ -448,385 +531,433 @@ export default function AdminInterface() {
                                     <span>☢️</span> НЕБЕЗПЕЧНА ЗОНА
                                 </h3>
                                 <p className="text-red-700 text-sm mb-4">
-                                    Ці дії призводять до повної втрати даних. Будьте обережні.
+                                    Ці дії призводять до повного видалення даних. Будьте обережні.
                                 </p>
                                 <button
-                                    onClick={() => {
-                                        if (confirm("ВИ ВПЕВНЕНІ?\n\nЦе видалить ВСІ дані (історію, палети, бейли) з цього пристрою.\n\nЦю дію неможливо відмінити!")) {
+                                    onClick={async () => {
+                                        if (confirm("ВИ ВПЕВНЕНІ?\n\nЦе видалить ВСІ дані (історію, палети, бейли) з цього пристрою і з хмари (якщо підключено).\n\nЦю дію неможливо відмінити!")) {
                                             if (confirm("Точно видалити все?")) {
-                                                localStorage.clear();
-                                                alert("Всі дані видалено. Сторінка буде перезавантажена.");
+                                                // 1. Wipe Supabase if active
+                                                if (dataSource === 'supabase') {
+                                                    try {
+                                                        const { error: e1 } = await SupabaseService.client.from('production_items').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
+                                                        const { error: e2 } = await SupabaseService.client.from('batches').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+
+                                                        if (e1 || e2) throw new Error("Cloud delete failed");
+                                                        alert("Хмарні дані (Supabase) очищено.");
+                                                    } catch (e) {
+                                                        console.error(e);
+                                                        alert("Помилка очищення хмари. Перевірте з'єднання.");
+                                                    }
+                                                }
+
+                                                // 2. Wipe Local Storage
+                                                localStorage.removeItem('zebra_items_v1');
+                                                localStorage.removeItem('zebra_batches_v1');
+                                                localStorage.removeItem('zebra_batch_date_v1');
+                                                localStorage.removeItem('zebra_batch_seq_v1');
+                                                // Keep settings, users, etc.
+
+                                                alert("Виробничі дані очищено. Сторінка буде перезавантажена.");
                                                 window.location.reload();
                                             }
                                         }
                                     }}
                                     className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl shadow-lg shadow-red-500/30 w-full flex items-center justify-center gap-2"
                                 >
-                                    🗑️ ПОВНЕ ОЧИЩЕННЯ БАЗИ ДАНИХ
+                                    🗑️ ПОВНЕ ОЧИЩЕННЯ (Бейли та Палети)
                                 </button>
                             </div>
                         </div>
                     )}
 
                     {/* REPORTS TAB */}
-                    {activeTab === 'reports' && (
-                        <div className="space-y-6 max-w-4xl">
-                            <h2 className="text-2xl font-bold text-slate-800 border-b pb-4 mb-6">Звіти та Експорт</h2>
+                    {
+                        activeTab === 'reports' && (
+                            <div className="space-y-6 max-w-4xl">
+                                <h2 className="text-2xl font-bold text-[var(--text-primary)] border-b border-[var(--border-color)] pb-4 mb-6">Звіти та Експорт</h2>
 
-                            {/* Controls */}
-                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-wrap gap-4 items-end">
-                                <div className="flex gap-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Від</label>
-                                        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="border border-slate-300 rounded px-3 py-2 text-sm" />
+                                {/* Controls */}
+                                <div className="bg-[var(--bg-tertiary)] p-4 rounded-xl border border-[var(--border-color)] flex flex-wrap gap-4 items-end">
+                                    <div className="flex gap-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Від</label>
+                                            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="border border-[var(--border-color)] bg-[var(--bg-input)] rounded px-3 py-2 text-sm text-[var(--text-primary)]" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">До</label>
+                                            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="border border-[var(--border-color)] bg-[var(--bg-input)] rounded px-3 py-2 text-sm text-[var(--text-primary)]" />
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">До</label>
-                                        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="border border-slate-300 rounded px-3 py-2 text-sm" />
+                                    <button
+                                        onClick={handleGenerateReport}
+                                        disabled={isGeneratingReport}
+                                        className="bg-[#115740] text-white px-6 py-2 rounded-lg font-bold hover:bg-[#0d4633] mb-[1px]"
+                                    >
+                                        {isGeneratingReport ? 'Завантаження...' : 'Сформувати'}
+                                    </button>
+                                </div>
+
+                                {/* Summary */}
+                                {historyData.reportData.length > 0 && (
+                                    <div className="space-y-4">
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                                                <div className="text-xs text-blue-600 font-bold uppercase">Всього етикеток</div>
+                                                <div className="text-3xl font-bold text-blue-900">{historyData.reportSummary.count}</div>
+                                            </div>
+                                            <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                                                <div className="text-xs text-emerald-600 font-bold uppercase">Загальна вага</div>
+                                                <div className="text-3xl font-bold text-emerald-900">{historyData.reportSummary.totalWeight.toFixed(2)} <span className="text-sm font-normal text-emerald-700">кг</span></div>
+                                            </div>
+                                        </div>
+
+                                        {/* Detailed Aggregation Table */}
+                                        {historyData.reportAggregation && historyData.reportAggregation.length > 0 && (
+                                            <div className="bg-white rounded-xl border border-[var(--border-color)] overflow-hidden">
+                                                <table className="w-full text-sm">
+                                                    <thead className="bg-[var(--bg-tertiary)] text-[var(--text-muted)] font-bold uppercase text-xs">
+                                                        <tr>
+                                                            <th className="p-3 text-left">Продукт</th>
+                                                            <th className="p-3 text-center">Кількість (шт)</th>
+                                                            <th className="p-3 text-right">Вага (кг)</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-[var(--border-color)]">
+                                                        {historyData.reportAggregation.map((item: any) => (
+                                                            <tr key={item.name} className="hover:bg-[var(--bg-tertiary)]">
+                                                                <td className="p-3 font-medium text-[var(--text-primary)]">{item.name}</td>
+                                                                <td className="p-3 text-center text-[var(--text-secondary)]">{item.count}</td>
+                                                                <td className="p-3 text-right font-bold text-[var(--text-primary)]">{item.weight.toFixed(2)}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Actions */}
+                                <div className="flex gap-4 pt-4">
+                                    <button
+                                        onClick={handlePrint}
+                                        disabled={historyData.reportData.length === 0}
+                                        className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white border border-slate-600 rounded-lg hover:bg-slate-800 disabled:opacity-50 font-bold shadow-sm"
+                                    >
+                                        🖨️ Друк (PDF)
+                                    </button>
+                                    <button
+                                        onClick={() => historyData.exportCsv(historyData.reportData)}
+                                        disabled={historyData.reportData.length === 0}
+                                        className="flex items-center gap-2 px-4 py-2 border border-[var(--border-color)] rounded-lg hover:bg-[var(--bg-tertiary)] disabled:opacity-50 text-[var(--text-secondary)]"
+                                    >
+                                        <DownloadIcon /> CSV
+                                    </button>
+                                    <button
+                                        onClick={() => historyData.exportXlsx(historyData.reportData)}
+                                        disabled={historyData.reportData.length === 0}
+                                        className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg hover:bg-green-100 disabled:opacity-50 font-bold"
+                                    >
+                                        📊 Excel (XLSX)
+                                    </button>
+                                    <button
+                                        onClick={() => historyData.sendEmail(historyData.reportData)}
+                                        disabled={historyData.reportData.length === 0}
+                                        className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-50 font-bold"
+                                    >
+                                        <MailIcon /> Send Email
+                                    </button>
+                                </div>
+
+                                {/* Email Settings */}
+                                <div className="pt-8 border-t border-[var(--border-color)]">
+                                    <h3 className="font-bold text-[var(--text-secondary)] mb-4">EmailJS Configuration</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div>
+                                            <label className="text-xs font-bold text-[var(--text-muted)] uppercase">Service ID</label>
+                                            <input
+                                                className="w-full border border-[var(--border-color)] bg-[var(--bg-input)] rounded px-3 py-2 text-sm mt-1 text-[var(--text-primary)]"
+                                                defaultValue={localStorage.getItem('emailjs_service_id') || ''}
+                                                onChange={e => localStorage.setItem('emailjs_service_id', e.target.value)}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-[var(--text-muted)] uppercase">Template ID</label>
+                                            <input
+                                                className="w-full border border-[var(--border-color)] bg-[var(--bg-input)] rounded px-3 py-2 text-sm mt-1 text-[var(--text-primary)]"
+                                                defaultValue={localStorage.getItem('emailjs_template_id') || ''}
+                                                onChange={e => localStorage.setItem('emailjs_template_id', e.target.value)}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-[var(--text-muted)] uppercase">Public Key</label>
+                                            <input
+                                                className="w-full border border-[var(--border-color)] bg-[var(--bg-input)] rounded px-3 py-2 text-sm mt-1 text-[var(--text-primary)]"
+                                                defaultValue={localStorage.getItem('emailjs_public_key') || ''}
+                                                onChange={e => localStorage.setItem('emailjs_public_key', e.target.value)}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
-                                <button
-                                    onClick={handleGenerateReport}
-                                    disabled={isGeneratingReport}
-                                    className="bg-[#115740] text-white px-6 py-2 rounded-lg font-bold hover:bg-[#0d4633] mb-[1px]"
-                                >
-                                    {isGeneratingReport ? 'Завантаження...' : 'Сформувати'}
-                                </button>
                             </div>
+                        )
+                    }
 
-                            {/* Summary */}
-                            {historyData.reportData.length > 0 && (
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-                                        <div className="text-xs text-blue-600 font-bold uppercase">Всього етикеток</div>
-                                        <div className="text-3xl font-bold text-blue-900">{historyData.reportSummary.count}</div>
-                                    </div>
-                                    <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
-                                        <div className="text-xs text-emerald-600 font-bold uppercase">Загальна вага</div>
-                                        <div className="text-3xl font-bold text-emerald-900">{historyData.reportSummary.totalWeight.toFixed(2)} <span className="text-sm font-normal text-emerald-700">кг</span></div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Actions */}
-                            <div className="flex gap-4 pt-4">
-                                <button
-                                    onClick={() => historyData.exportCsv(historyData.reportData)}
-                                    disabled={historyData.reportData.length === 0}
-                                    className="flex items-center gap-2 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50"
-                                >
-                                    <DownloadIcon /> CSV
-                                </button>
-                                <button
-                                    onClick={() => historyData.exportXlsx(historyData.reportData)}
-                                    disabled={historyData.reportData.length === 0}
-                                    className="flex items-center gap-2 px-4 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg hover:bg-green-100 disabled:opacity-50 font-bold"
-                                >
-                                    📊 Excel (XLSX)
-                                </button>
-                                <button
-                                    onClick={() => historyData.sendEmail(historyData.reportData)}
-                                    disabled={historyData.reportData.length === 0}
-                                    className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-50 font-bold"
-                                >
-                                    <MailIcon /> Send Email
-                                </button>
-                            </div>
-
-                            {/* Email Settings */}
-                            <div className="pt-8 border-t">
-                                <h3 className="font-bold text-slate-700 mb-4">EmailJS Configuration</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 uppercase">Service ID</label>
-                                        <input
-                                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm mt-1"
-                                            defaultValue={localStorage.getItem('emailjs_service_id') || ''}
-                                            onChange={e => localStorage.setItem('emailjs_service_id', e.target.value)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 uppercase">Template ID</label>
-                                        <input
-                                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm mt-1"
-                                            defaultValue={localStorage.getItem('emailjs_template_id') || ''}
-                                            onChange={e => localStorage.setItem('emailjs_template_id', e.target.value)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 uppercase">Public Key</label>
-                                        <input
-                                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm mt-1"
-                                            defaultValue={localStorage.getItem('emailjs_public_key') || ''}
-                                            onChange={e => localStorage.setItem('emailjs_public_key', e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
 
                     {/* USERS TAB */}
-                    {activeTab === 'users' && (
-                        <div className="space-y-6 max-w-3xl">
-                            <h2 className="text-2xl font-bold text-slate-800 border-b pb-4 mb-6">Користувачі</h2>
+                    {
+                        activeTab === 'users' && (
+                            <div className="space-y-6 max-w-3xl">
+                                <h2 className="text-2xl font-bold text-[var(--text-primary)] border-b border-[var(--border-color)] pb-4 mb-6">Користувачі</h2>
 
-                            {/* User List */}
-                            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                                <table className="w-full text-left border-collapse">
-                                    <thead className="bg-slate-50 text-slate-500 text-xs uppercase font-bold">
-                                        <tr>
-                                            <th className="p-4">Ім'я</th>
-                                            <th className="p-4">Роль</th>
-                                            <th className="p-4">PIN</th>
-                                            <th className="p-4 text-right">Дії</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {usersList.map((u: User) => (
-                                            <tr key={u.id} className="hover:bg-slate-50">
-                                                <td className="p-4 font-bold text-slate-800">{u.name}</td>
-                                                <td className="p-4">
-                                                    <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' :
-                                                        u.role === 'operator' ? 'bg-blue-100 text-blue-700' :
-                                                            'bg-slate-100 text-slate-600'
-                                                        }`}>
-                                                        {u.role}
-                                                    </span>
-                                                </td>
-                                                <td className="p-4 font-mono text-slate-500">****</td>
-                                                <td className="p-4 text-right">
-                                                    <div className="flex justify-end gap-2">
-                                                        <button
-                                                            onClick={() => {
-                                                                setNewUser(u);
-                                                                window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-                                                            }}
-                                                            className="text-blue-500 hover:text-blue-700 font-bold text-sm bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition-colors"
-                                                        >
-                                                            ✏️ Ред.
-                                                        </button>
-                                                        <button
-                                                            onClick={async () => {
-                                                                if (window.confirm(`Видалити користувача ${u.name}?`)) {
-                                                                    const updated = await UserService.deleteUser(u.id);
-                                                                    setUsersList(updated);
-                                                                    if (newUser.id === u.id) {
-                                                                        setNewUser({ id: '', name: '', role: 'operator', pin: '' });
-                                                                    }
-                                                                }
-                                                            }}
-                                                            disabled={u.role === 'admin' && usersList.filter(x => x.role === 'admin').length === 1}
-                                                            className="text-red-500 hover:text-red-700 font-bold text-sm bg-red-50 px-3 py-1 rounded hover:bg-red-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                                        >
-                                                            Видалити
-                                                        </button>
-                                                    </div>
-                                                </td>
+                                {/* User List */}
+                                <div className="bg-[var(--bg-card)] rounded-xl border border-[var(--border-color)] overflow-hidden">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead className="bg-[var(--bg-tertiary)] text-[var(--text-muted)] text-xs uppercase font-bold">
+                                            <tr>
+                                                <th className="p-4">Ім'я</th>
+                                                <th className="p-4">Роль</th>
+                                                <th className="p-4">PIN</th>
+                                                <th className="p-4 text-right">Дії</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            {/* Add/Edit User Form */}
-                            <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
-                                <h3 className="font-bold text-slate-700 mb-4">{newUser.id ? 'Редагувати користувача' : 'Додати користувача'}</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Ім'я</label>
-                                        <input
-                                            value={newUser.name}
-                                            onChange={e => setNewUser({ ...newUser, name: e.target.value })}
-                                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
-                                            placeholder="ex. Іван Петренко"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Роль</label>
-                                        <select
-                                            value={newUser.role}
-                                            onChange={e => setNewUser({ ...newUser, role: e.target.value as any })}
-                                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
-                                        >
-                                            {UserService.getRoles().map(r => (
-                                                <option key={r.id} value={r.id}>{r.name}</option>
+                                        </thead>
+                                        <tbody className="divide-y divide-[var(--border-color)]">
+                                            {usersList.map((u: User) => (
+                                                <tr key={u.id} className="hover:bg-[var(--bg-tertiary)]">
+                                                    <td className="p-4 font-bold text-[var(--text-primary)]">{u.name}</td>
+                                                    <td className="p-4">
+                                                        <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' :
+                                                            u.role === 'operator' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30' :
+                                                                'bg-[var(--bg-tertiary)] text-[var(--text-secondary)]'
+                                                            }`}>
+                                                            {u.role}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-4 font-mono text-[var(--text-muted)]">****</td>
+                                                    <td className="p-4 text-right">
+                                                        <div className="flex justify-end gap-2">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setNewUser(u);
+                                                                    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                                                                }}
+                                                                className="text-blue-500 hover:text-blue-700 font-bold text-sm bg-blue-50 px-3 py-1 rounded hover:bg-blue-100 transition-colors"
+                                                            >
+                                                                ✏️ Ред.
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setDeleteConfirm({ isOpen: true, user: u })}
+                                                                disabled={u.role === 'admin' && usersList.filter(x => x.role === 'admin').length === 1}
+                                                                className="text-red-500 hover:text-red-700 font-bold text-sm bg-red-50 px-3 py-1 rounded hover:bg-red-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                                            >
+                                                                Видалити
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
                                             ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-1">PIN (4 цифри)</label>
-                                        <input
-                                            value={newUser.pin}
-                                            maxLength={4}
-                                            onChange={e => setNewUser({ ...newUser, pin: e.target.value.replace(/\D/g, '') })}
-                                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm font-mono"
-                                            placeholder="0000"
-                                        />
-                                    </div>
+                                        </tbody>
+                                    </table>
                                 </div>
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={async () => {
-                                            if (newUser.name && newUser.pin.length === 4) {
-                                                try {
-                                                    let updatedList;
-                                                    if (newUser.id) {
-                                                        // Update existing
-                                                        updatedList = await UserService.updateUser(newUser);
-                                                        alert('Дані оновлено!');
-                                                    } else {
-                                                        // Create new with UUID
-                                                        const created = { ...newUser, id: crypto.randomUUID() };
-                                                        updatedList = await UserService.addUser(created);
-                                                        alert('Користувача додано!');
-                                                    }
-                                                    setUsersList(updatedList);
-                                                    setNewUser({ id: '', name: '', role: 'operator', pin: '' });
-                                                } catch (e: any) {
-                                                    alert(e.message);
-                                                }
-                                            } else {
-                                                alert('Заповніть всі поля коректно (PIN має бути 4 цифри)');
-                                            }
-                                        }}
-                                        className={`px-6 py-2 rounded-lg font-bold text-white transition-colors ${newUser.id ? 'bg-blue-600 hover:bg-blue-700' : 'bg-[#115740] hover:bg-[#0d4633]'}`}
-                                    >
-                                        {newUser.id ? '💾 Зберегти зміни' : '+ Створити'}
-                                    </button>
 
-                                    {newUser.id && (
+                                {/* Add/Edit User Form */}
+                                <div className="bg-[var(--bg-tertiary)] p-6 rounded-xl border border-[var(--border-color)]">
+                                    <h3 className="font-bold text-[var(--text-secondary)] mb-4">{newUser.id ? 'Редагувати користувача' : 'Додати користувача'}</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Ім'я</label>
+                                            <input
+                                                value={newUser.name}
+                                                onChange={e => setNewUser({ ...newUser, name: e.target.value })}
+                                                className="w-full border border-[var(--border-color)] bg-[var(--bg-input)] rounded px-3 py-2 text-sm text-[var(--text-primary)]"
+                                                placeholder="ex. Іван Петренко"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Роль</label>
+                                            <select
+                                                value={newUser.role}
+                                                onChange={e => setNewUser({ ...newUser, role: e.target.value as any })}
+                                                className="w-full border border-[var(--border-color)] bg-[var(--bg-input)] rounded px-3 py-2 text-sm text-[var(--text-primary)]"
+                                            >
+                                                {UserService.getRoles().map(r => (
+                                                    <option key={r.id} value={r.id}>{r.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-[var(--text-muted)] uppercase mb-1">PIN (4 цифри)</label>
+                                            <input
+                                                value={newUser.pin}
+                                                maxLength={4}
+                                                onChange={e => setNewUser({ ...newUser, pin: e.target.value.replace(/\D/g, '') })}
+                                                className="w-full border border-[var(--border-color)] bg-[var(--bg-input)] rounded px-3 py-2 text-sm font-mono text-[var(--text-primary)]"
+                                                placeholder="0000"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-3">
                                         <button
-                                            onClick={() => setNewUser({ id: '', name: '', role: 'operator', pin: '' })}
-                                            className="px-6 py-2 rounded-lg font-bold text-slate-600 hover:bg-slate-200 bg-slate-100 transition-colors"
+                                            onClick={async () => {
+                                                if (newUser.name && newUser.pin.length === 4) {
+                                                    try {
+                                                        let updatedList;
+                                                        if (newUser.id) {
+                                                            // Update existing
+                                                            updatedList = await UserService.updateUser(newUser);
+                                                            alert('Дані оновлено!');
+                                                        } else {
+                                                            // Create new with UUID
+                                                            const created = { ...newUser, id: crypto.randomUUID() };
+                                                            updatedList = await UserService.addUser(created);
+                                                            alert('Користувача додано!');
+                                                        }
+                                                        setUsersList(updatedList);
+                                                        setNewUser({ id: '', name: '', role: 'operator', pin: '' });
+                                                    } catch (e: any) {
+                                                        alert(e.message);
+                                                    }
+                                                } else {
+                                                    alert('Заповніть всі поля коректно (PIN має бути 4 цифри)');
+                                                }
+                                            }}
+                                            className={`px-6 py-2 rounded-lg font-bold text-white transition-colors ${newUser.id ? 'bg-blue-600 hover:bg-blue-700' : 'bg-[#115740] hover:bg-[#0d4633]'}`}
                                         >
-                                            Скасувати
+                                            {newUser.id ? '💾 Зберегти зміни' : '+ Створити'}
                                         </button>
-                                    )}
+
+                                        {newUser.id && (
+                                            <button
+                                                onClick={() => setNewUser({ id: '', name: '', role: 'operator', pin: '' })}
+                                                className="px-6 py-2 rounded-lg font-bold text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] bg-[var(--bg-card)] border border-[var(--border-color)] transition-colors"
+                                            >
+                                                Скасувати
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        )
+                    }
 
                     {/* SYSTEM TAB */}
-                    {activeTab === 'system' && (
-                        <div className="space-y-6 max-w-3xl">
-                            <h2 className="text-2xl font-bold text-slate-800 border-b pb-4 mb-6">Системні Налаштування</h2>
+                    {
+                        activeTab === 'system' && (
+                            <div className="space-y-6 max-w-3xl">
+                                <h2 className="text-2xl font-bold text-[var(--text-primary)] border-b border-[var(--border-color)] pb-4 mb-6">Системні Налаштування</h2>
 
-                            <div className="bg-slate-50 p-6 rounded-xl border border-dashed border-slate-300">
-                                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">🏷️ Barcode Template</h3>
-                                <div className="space-y-2">
-                                    <label className="block text-xs font-bold text-slate-700 uppercase">Pattern / Шаблон</label>
-                                    <input
-                                        value={barcodePattern}
-                                        onChange={(e) => {
-                                            setBarcodePattern(e.target.value);
-                                            localStorage.setItem('zebra_barcode_pattern_v1', e.target.value);
-                                        }}
-                                        className="w-full border border-slate-300 rounded px-3 py-2 text-sm font-mono"
-                                    />
-                                    <p className="text-xs text-slate-400">Available: {'{sku}, {date}, {weight}, {serialNumber}'}</p>
-                                </div>
-                            </div>
-
-                            <div className="pt-4">
-                                <button
-                                    onClick={() => historyData.addDummyData?.()}
-                                    className="w-full py-3 bg-red-50 hover:bg-red-100 text-red-700 font-bold rounded-lg border border-red-200 transition-colors text-sm dashed"
-                                >
-                                    + Generate Dummy Data (Test)
-                                </button>
-                            </div>
-
-                            {/* Email Settings */}
-                            <div className="pt-6 border-t">
-                                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">📧 Налаштування Email (Звіти)</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 uppercase">ID Сервісу (Service ID)</label>
+                                <div className="bg-[var(--bg-tertiary)] p-6 rounded-xl border border-dashed border-[var(--border-color)]">
+                                    <h3 className="text-sm font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3 flex items-center gap-2">🏷️ Barcode Template</h3>
+                                    <div className="space-y-2">
+                                        <label className="block text-xs font-bold text-[var(--text-secondary)] uppercase">Pattern / Шаблон</label>
                                         <input
-                                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm mt-1"
-                                            defaultValue={localStorage.getItem('emailjs_service_id') || ''}
-                                            onChange={e => localStorage.setItem('emailjs_service_id', e.target.value)}
-                                            placeholder="service_..."
+                                            value={barcodePattern}
+                                            onChange={(e) => {
+                                                setBarcodePattern(e.target.value);
+                                                localStorage.setItem('zebra_barcode_pattern_v1', e.target.value);
+                                            }}
+                                            className="w-full border border-[var(--border-color)] bg-[var(--bg-input)] rounded px-3 py-2 text-sm font-mono text-[var(--text-primary)]"
                                         />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 uppercase">ID Шаблону (Template ID)</label>
-                                        <input
-                                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm mt-1"
-                                            defaultValue={localStorage.getItem('emailjs_template_id') || ''}
-                                            onChange={e => localStorage.setItem('emailjs_template_id', e.target.value)}
-                                            placeholder="template_..."
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 uppercase">Публічний ключ (Public Key)</label>
-                                        <input
-                                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm mt-1"
-                                            defaultValue={localStorage.getItem('emailjs_public_key') || ''}
-                                            onChange={e => localStorage.setItem('emailjs_public_key', e.target.value)}
-                                            placeholder="public_key"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 uppercase">Email Отримувача (За замовчуванням)</label>
-                                        <input
-                                            className="w-full border border-slate-300 rounded px-3 py-2 text-sm mt-1"
-                                            defaultValue={localStorage.getItem('zebra_report_email_v1') || ''}
-                                            onChange={e => localStorage.setItem('zebra_report_email_v1', e.target.value)}
-                                            placeholder="report@example.com"
-                                        />
+                                        <p className="text-xs text-[var(--text-muted)]">Available: {'{sku}, {date}, {weight}, {serialNumber}'}</p>
                                     </div>
                                 </div>
-                            </div>
 
-                            {/* Admin Tools */}
-                            <div className="pt-6 border-t">
-                                <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">🛠️ Інструменти</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                    <button
-                                        onClick={() => setShowAnalytics(true)}
-                                        className="flex items-center gap-3 p-4 bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
-                                    >
-                                        <span className="text-2xl">📊</span>
-                                        <div className="text-left">
-                                            <div className="text-sm opacity-80">Аналітика</div>
-                                            <div>Dashboard</div>
+                                <div className="pt-4">
+                                    {/* Dummy Data Generator Removed for Stability */}
+                                </div>
+
+                                {/* Email Settings */}
+                                <div className="pt-6 border-t border-[var(--border-color)]">
+                                    <h3 className="text-sm font-bold text-[var(--text-muted)] uppercase tracking-wider mb-4">📧 Налаштування Email (Звіти)</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-xs font-bold text-[var(--text-muted)] uppercase">ID Сервісу (Service ID)</label>
+                                            <input
+                                                className="w-full border border-[var(--border-color)] bg-[var(--bg-input)] rounded px-3 py-2 text-sm mt-1 text-[var(--text-primary)]"
+                                                defaultValue={localStorage.getItem('emailjs_service_id') || ''}
+                                                onChange={e => localStorage.setItem('emailjs_service_id', e.target.value)}
+                                                placeholder="service_..."
+                                            />
                                         </div>
-                                    </button>
-                                    <button
-                                        onClick={() => setShowAuditLog(true)}
-                                        className="flex items-center gap-3 p-4 bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
-                                    >
-                                        <span className="text-2xl">📋</span>
-                                        <div className="text-left">
-                                            <div className="text-sm opacity-80">Журнал</div>
-                                            <div>Audit Log</div>
+                                        <div>
+                                            <label className="text-xs font-bold text-[var(--text-muted)] uppercase">ID Шаблону (Template ID)</label>
+                                            <input
+                                                className="w-full border border-[var(--border-color)] bg-[var(--bg-input)] rounded px-3 py-2 text-sm mt-1 text-[var(--text-primary)]"
+                                                defaultValue={localStorage.getItem('emailjs_template_id') || ''}
+                                                onChange={e => localStorage.setItem('emailjs_template_id', e.target.value)}
+                                                placeholder="template_..."
+                                            />
                                         </div>
-                                    </button>
-                                    <button
-                                        onClick={() => setShowQRScanner(true)}
-                                        className="flex items-center gap-3 p-4 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
-                                    >
-                                        <span className="text-2xl">📷</span>
-                                        <div className="text-left">
-                                            <div className="text-sm opacity-80">Сканер</div>
-                                            <div>QR/Barcode</div>
+                                        <div>
+                                            <label className="text-xs font-bold text-[var(--text-muted)] uppercase">Публічний ключ (Public Key)</label>
+                                            <input
+                                                className="w-full border border-[var(--border-color)] bg-[var(--bg-input)] rounded px-3 py-2 text-sm mt-1 text-[var(--text-primary)]"
+                                                defaultValue={localStorage.getItem('emailjs_public_key') || ''}
+                                                onChange={e => localStorage.setItem('emailjs_public_key', e.target.value)}
+                                                placeholder="public_key"
+                                            />
                                         </div>
-                                    </button>
+                                        <div>
+                                            <label className="text-xs font-bold text-[var(--text-muted)] uppercase">Email Отримувача (За замовчуванням)</label>
+                                            <input
+                                                className="w-full border border-[var(--border-color)] bg-[var(--bg-input)] rounded px-3 py-2 text-sm mt-1 text-[var(--text-primary)]"
+                                                defaultValue={localStorage.getItem('zebra_report_email_v1') || ''}
+                                                onChange={e => localStorage.setItem('zebra_report_email_v1', e.target.value)}
+                                                placeholder="report@example.com"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Admin Tools */}
+                                <div className="pt-6 border-t border-[var(--border-color)]">
+                                    <h3 className="text-sm font-bold text-[var(--text-muted)] uppercase tracking-wider mb-4">🛠️ Інструменти</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                        <button
+                                            onClick={() => setShowAnalytics(true)}
+                                            className="flex items-center gap-3 p-4 bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
+                                        >
+                                            <span className="text-2xl">📊</span>
+                                            <div className="text-left">
+                                                <div className="text-sm opacity-80">Аналітика</div>
+                                                <div>Dashboard</div>
+                                            </div>
+                                        </button>
+                                        <button
+                                            onClick={() => setShowAuditLog(true)}
+                                            className="flex items-center gap-3 p-4 bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
+                                        >
+                                            <span className="text-2xl">📋</span>
+                                            <div className="text-left">
+                                                <div className="text-sm opacity-80">Журнал</div>
+                                                <div>Audit Log</div>
+                                            </div>
+                                        </button>
+                                        <button
+                                            onClick={() => setShowQRScanner(true)}
+                                            className="flex items-center gap-3 p-4 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
+                                        >
+                                            <span className="text-2xl">📷</span>
+                                            <div className="text-left">
+                                                <div className="text-sm opacity-80">Сканер</div>
+                                                <div>QR/Barcode</div>
+                                            </div>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        )
+                    }
 
-                </main>
-            </div>
+                </main >
+            </div >
 
             {/* Feature Modals */}
-            <AnalyticsDashboard
+            < AnalyticsDashboard
                 printHistory={historyData.history || []}
-                onClose={() => setShowAnalytics(false)}
+                onClose={() => setShowAnalytics(false)
+                }
                 isOpen={showAnalytics}
             />
             <AuditLogViewer
@@ -841,10 +972,37 @@ export default function AdminInterface() {
                     setShowQRScanner(false);
                 }}
             />
-            {showLabelDesigner && (
-                <LabelDesigner onClose={() => setShowLabelDesigner(false)} printer={printerData.printer} />
-            )}
-        </div>
+            {
+                showLabelDesigner && (
+                    <LabelDesigner onClose={() => setShowLabelDesigner(false)} printer={printerData.printer} />
+                )
+            }
+
+            {/* Delete User Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={deleteConfirm.isOpen}
+                title="Видалити користувача?"
+                message={`Ви впевнені, що хочете видалити користувача "${deleteConfirm.user?.name}"? Цю дію неможливо скасувати.`}
+                confirmText="Видалити"
+                cancelText="Скасувати"
+                variant="danger"
+                onCancel={() => setDeleteConfirm({ isOpen: false, user: null })}
+                onConfirm={async () => {
+                    if (deleteConfirm.user) {
+                        try {
+                            const updated = await UserService.deleteUser(deleteConfirm.user.id);
+                            setUsersList(updated);
+                            if (newUser.id === deleteConfirm.user.id) {
+                                setNewUser({ id: '', name: '', role: 'operator', pin: '' });
+                            }
+                        } catch (e: any) {
+                            alert('Помилка видалення: ' + e.message);
+                        }
+                    }
+                    setDeleteConfirm({ isOpen: false, user: null });
+                }}
+            />
+        </div >
 
     );
 }
@@ -853,9 +1011,9 @@ function NavButton({ active, onClick, label, icon }: { active: boolean, onClick:
     return (
         <button
             onClick={onClick}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${active ? 'bg-[#115740] text-white shadow-lg shadow-emerald-900/20' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-bold ${active ? 'bg-[var(--accent-primary)] text-white shadow-lg shadow-emerald-900/20' : 'text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:text-[var(--text-primary)]'}`}
         >
-            <div className={`w-6 h-6 ${active ? 'text-emerald-200' : 'text-slate-400'}`}>{icon}</div>
+            <div className={`w-6 h-6 ${active ? 'text-emerald-200' : 'text-[var(--text-muted)]'}`}>{icon}</div>
             <span>{label}</span>
         </button>
     )

@@ -36,6 +36,7 @@ export const PalletService = {
                     id: b.id, // Supabase UUID
                     // If we want to display a shorter number, we might use batch_number or fallback to ID
                     // The UI might expect string ID.
+                    displayId: b.batch_number,
                     date: b.created_at,
                     sort: b.sort,
                     status: b.status as any,
@@ -74,21 +75,41 @@ export const PalletService = {
     // --- Actions ---
 
     getNextBatchNumber(): number {
-        return parseInt(localStorage.getItem(BATCH_SEQUENCE_KEY) || '0') + 1;
+        const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const lastDate = localStorage.getItem('zebra_batch_date_v1');
+
+        if (lastDate !== today) {
+            // New day, reset sequence
+            localStorage.setItem('zebra_batch_date_v1', today);
+            localStorage.setItem(BATCH_SEQUENCE_KEY, '0');
+            return 1;
+        }
+
+        const seq = parseInt(localStorage.getItem(BATCH_SEQUENCE_KEY) || '0') + 1;
+        localStorage.setItem(BATCH_SEQUENCE_KEY, seq.toString());
+        return seq;
     },
 
     async createBatch(sort: string, customId?: string, productName: string = 'Unknown'): Promise<Batch> {
+        // Generate Standard ID if not provided
+        // Format: P-YYYYMMDD-XXX
+        let id = customId;
+        if (!id) {
+            const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            const seq = this.getNextBatchNumber();
+            id = `P-${today}-${String(seq).padStart(3, '0')}`;
+        }
+
         if (USE_SUPABASE && supabase) {
             try {
                 // Insert into Supabase
-                // ID is auto-generated UUID
                 const { data, error } = await supabase
                     .from('batches')
                     .insert({
                         sort,
                         product_name: productName,
                         status: 'active',
-                        batch_number: customId // Optional visual ID
+                        batch_number: id // Store the formatted ID
                     })
                     .select()
                     .single();
@@ -97,6 +118,7 @@ export const PalletService = {
 
                 return {
                     id: data.id,
+                    displayId: data.batch_number, // Ensure UI uses this
                     date: data.created_at,
                     items: [],
                     totalWeight: 0,
@@ -108,23 +130,9 @@ export const PalletService = {
             }
         }
 
-        const batches = await this.getBatches(); // Sync fallback calls this actually sync implementation if we kept it separate... 
-        // Wait, getBatches is now async. So "await" is correct.
-        // BUT if Supabase failed, getBatches returns local items.
-        // So we can maintain hybrid logic? 
-        // The issue is mixing IDs (UUID vs "1", "2").
-        // Let's assume if Supabase is ON, we only use Supabase.
-
-        // Fallback Logic
-        let id = customId;
-        if (!id) {
-            let seq = this.getNextBatchNumber();
-            localStorage.setItem(BATCH_SEQUENCE_KEY, seq.toString());
-            id = seq.toString();
-        }
-
         const newBatch: Batch = {
             id,
+            displayId: id,
             date: new Date().toISOString(),
             items: [],
             totalWeight: 0,
@@ -187,7 +195,7 @@ export const PalletService = {
                 throw new Error("Cannot add item: missing DB ID");
             }
 
-            await supabase
+            const { error } = await supabase
                 .from('production_items')
                 .update({
                     batch_id: batchId,
@@ -195,10 +203,53 @@ export const PalletService = {
                 })
                 .eq('id', item.productionItemId);
 
-            // 2. Update Batch stats (trigger or manual)
-            // For now, let's just return refreshed batch
-            const batches = await this.getBatches();
-            return batches.find(b => b.id === batchId)!;
+            if (error) throw error;
+
+            // Optimistic return or single fetch
+            // Fetching single batch is faster and reliable if we query by ID
+            // But getBatches() fetches ALL. Let's make a getBatchById helper or just fetch one.
+
+            const { data: batchData, error: batchError } = await supabase
+                .from('batches')
+                .select('*')
+                .eq('id', batchId)
+                .single();
+
+            if (batchError || !batchData) {
+                // Fallback: Single fetch failed, try getBatches
+                console.warn("Single batch fetch failed, falling back to getBatches", batchError);
+                const batches = await this.getBatches();
+                const foundBatch = batches.find(b => b.id === batchId);
+                if (!foundBatch) {
+                    console.error(`Batch ${batchId} not found in getBatches either`);
+                    throw new Error("Batch not found after update");
+                }
+                return foundBatch;
+            }
+
+            // We also need items for this batch to update UI correctly
+            const { data: itemsData } = await supabase
+                .from('production_items')
+                .select('*')
+                .eq('batch_id', batchId);
+
+            return {
+                id: batchData.id,
+                displayId: batchData.batch_number,
+                date: batchData.created_at,
+                sort: batchData.sort,
+                status: batchData.status,
+                totalWeight: batchData.total_weight || 0,
+                items: itemsData ? itemsData.map((i: any) => ({
+                    productionItemId: i.id,
+                    serialNumber: i.serial_number,
+                    weight: i.weight,
+                    productName: i.product_name,
+                    sort: i.sort,
+                    date: i.date,
+                    barcode: i.barcode
+                })) : []
+            };
         }
 
         const batches = await this.getBatches();

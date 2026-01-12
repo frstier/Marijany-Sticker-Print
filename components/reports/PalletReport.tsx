@@ -136,98 +136,161 @@ export default function PalletReport({ onClose }: PalletReportProps) {
     };
 
     const handleExportXLSX = () => {
-        if (pallets.length === 0) return;
+        if (filteredPallets.length === 0) return;
 
-        // Summary sheet data
-        const summaryData = pallets.map(pallet => ({
-            'Палета №': pallet.id,
-            'Дата': pallet.date.slice(0, 10),
-            'Кількість': pallet.items.length,
-            'Вага (кг)': pallet.totalWeight.toFixed(2),
-            'Сорт': pallet.sort,
-            'Бейли': pallet.items.map(i => `#${i.serialNumber}`).join('; ')
-        }));
+        // Flatten all items from filtered pallets
+        const allItems = filteredPallets.flatMap(pallet =>
+            pallet.items.map(item => ({
+                ...item,
+                palletId: pallet.id,
+                palletDate: pallet.date
+            }))
+        );
 
-        // Detailed sheet data
-        const detailedData: any[] = [];
-        pallets.forEach(pallet => {
-            pallet.items.forEach(item => {
-                detailedData.push({
-                    'Палета №': pallet.id,
-                    'Дата Палети': pallet.date.slice(0, 10),
-                    '№ Бейлу': item.serialNumber,
-                    'Продукт': item.productName,
-                    'Сорт': item.sort,
-                    'Вага (кг)': item.weight
-                });
-            });
+        // Sort by Product Name first
+        allItems.sort((a, b) => a.productName.localeCompare(b.productName));
+
+        // 1. Summary Sheet (Aggregated by Product)
+        const productStats: Record<string, { count: number, weight: number }> = {};
+        allItems.forEach(item => {
+            const key = item.productName || 'Unknown';
+            if (!productStats[key]) productStats[key] = { count: 0, weight: 0 };
+            productStats[key].count++;
+            productStats[key].weight += item.weight;
         });
 
-        // Create workbook with 2 sheets
-        const wb = utils.book_new();
-        const wsSummary = utils.json_to_sheet(summaryData);
-        const wsDetailed = utils.json_to_sheet(detailedData);
+        const summaryData = Object.entries(productStats).map(([name, stats]) => ({
+            "Продукт": name,
+            "Кількість (шт)": stats.count,
+            "Вага (кг)": parseFloat(stats.weight.toFixed(3))
+        }));
 
-        utils.book_append_sheet(wb, wsSummary, 'Зведений');
-        utils.book_append_sheet(wb, wsDetailed, 'Детальний');
+        // Total Row
+        summaryData.push({
+            "Продукт": "ВСЬОГО",
+            "Кількість (шт)": allItems.length,
+            "Вага (кг)": parseFloat(allItems.reduce((s, i) => s + i.weight, 0).toFixed(3))
+        });
+
+        // 2. Detailed Sheet
+        const detailedData = allItems.map(item => ({
+            "Дата": item.date, // Item Date (Production)
+            "UID": item.barcode,
+            "№": item.serialNumber,
+            "№ Палети": item.palletId,
+            "Продукт": item.productName,
+            "Вага (кг)": Number(item.weight),
+            "Сорт": item.sort || '-'
+        }));
+
+        // Create workbook
+        const wb = utils.book_new();
+
+        const wsSummary = utils.json_to_sheet(summaryData);
+        wsSummary['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 15 }];
+        utils.book_append_sheet(wb, wsSummary, 'Зведення');
+
+        const wsDetails = utils.json_to_sheet(detailedData);
+        wsDetails['!cols'] = [{ wch: 12 }, { wch: 25 }, { wch: 10 }, { wch: 15 }, { wch: 30 }, { wch: 12 }, { wch: 10 }];
+        utils.book_append_sheet(wb, wsDetails, 'Деталі');
 
         // Export
         const wbout = write(wb, { bookType: 'xlsx', type: 'array' });
         const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `pallets_report_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        link.download = `Звіт_Обліковця_${new Date().toLocaleDateString('uk-UA')}.xlsx`;
         link.click();
     };
 
     const handlePrint = () => {
-        // Create printable content
+        // Flatten and Group
+        const allItems = filteredPallets.flatMap(pallet =>
+            pallet.items.map(item => ({
+                ...item,
+                palletId: pallet.id
+            }))
+        );
+
+        const groupedItems: Record<string, typeof allItems> = {};
+        allItems.forEach(item => {
+            const key = item.productName || 'Інше';
+            if (!groupedItems[key]) groupedItems[key] = [];
+            groupedItems[key].push(item);
+        });
+
+        let tablesHtml = '';
+        const totalWeight = allItems.reduce((sum, i) => sum + i.weight, 0).toFixed(2);
+
+        Object.entries(groupedItems).forEach(([productName, items]) => {
+            const groupWeight = items.reduce((sum, i) => sum + i.weight, 0).toFixed(2);
+            const rows = items.map(item => `
+                <tr>
+                    <td>${item.date}</td>
+                    <td style="font-family: monospace;">${item.barcode}</td>
+                    <td>${item.serialNumber}</td>
+                    <td>${item.palletId}</td>
+                    <td style="text-align: right;">${item.weight} кг</td>
+                    <td>${item.sort || '-'}</td>
+                </tr>
+            `).join('');
+
+            tablesHtml += `
+                <div class="product-section">
+                    <h2>${productName}</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Дата</th>
+                                <th>UID</th>
+                                <th>№</th>
+                                <th>№ Палети</th>
+                                <th>Вага (кг)</th>
+                                <th>Сорт</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                    <div class="subtotal">
+                        Всього по ${productName}: ${items.length} шт | Вага: ${groupWeight} кг
+                    </div>
+                </div>
+            `;
+        });
+
         const printContent = `
             <html>
             <head>
-                <title>Звіт по Палетах</title>
+                <title>Звіт Обліковця</title>
                 <style>
                     body { font-family: Arial, sans-serif; padding: 20px; }
-                    h1 { text-align: center; color: #333; }
-                    .summary { margin-bottom: 20px; padding: 10px; background: #f5f5f5; border-radius: 8px; }
-                    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                    th { background-color: #6366f1; color: white; }
-                    tr:nth-child(even) { background-color: #f9f9f9; }
-                    .pallet-header { background: #e0e7ff; font-weight: bold; }
-                    @media print { body { -webkit-print-color-adjust: exact; } }
+                    h1 { text-align: center; color: #333; margin-bottom: 10px; }
+                    .period { text-align: center; color: #666; margin-bottom: 20px; }
+                    .product-section { margin-bottom: 30px; page-break-inside: avoid; }
+                    h2 { color: #4f46e5; border-bottom: 2px solid #e0e7ff; padding-bottom: 5px; margin-top: 0; }
+                    table { width: 100%; border-collapse: collapse; margin-bottom: 10px; font-size: 12px; }
+                    th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
+                    th { background-color: #f3f4f6; font-weight: bold; }
+                    tr:nth-child(even) { background-color: #f9fafb; }
+                    .subtotal { text-align: right; font-weight: bold; background: #eef2ff; padding: 8px; border-radius: 4px; color: #3730a3; }
+                    .grand-total { margin-top: 30px; padding: 20px; background: #312e81; color: white; text-align: right; font-size: 1.2em; font-weight: bold; border-radius: 8px; }
+                    @media print { 
+                        body { -webkit-print-color-adjust: exact; } 
+                        .product-section { break-inside: avoid; }
+                    }
                 </style>
             </head>
             <body>
-                <h1>Звіт по Палетах</h1>
-                <div class="summary">
-                    <strong>Дата звіту:</strong> ${new Date().toLocaleDateString('uk-UA')} |
-                    <strong>Палет:</strong> ${pallets.length} |
-                    <strong>Бейлів:</strong> ${pallets.reduce((sum, p) => sum + p.items.length, 0)} |
-                    <strong>Загальна вага:</strong> ${pallets.reduce((sum, p) => sum + p.totalWeight, 0).toFixed(1)} кг
+                <h1>Звіт Обліковця (Палети)</h1>
+                <div class="period">
+                    ${filterDateFrom || 'Початок'} — ${filterDateTo || 'Сьогодні'}
                 </div>
-                <table>
-                    <tr>
-                        <th>Палета №</th>
-                        <th>Дата</th>
-                        <th>№ Бейлу</th>
-                        <th>Продукт</th>
-                        <th>Сорт</th>
-                        <th>Вага (кг)</th>
-                    </tr>
-                    ${pallets.map(pallet =>
-            pallet.items.map((item, idx) => `
-                            <tr ${idx === 0 ? 'class="pallet-header"' : ''}>
-                                <td>${idx === 0 ? pallet.id : ''}</td>
-                                <td>${idx === 0 ? pallet.date.slice(0, 10) : ''}</td>
-                                <td>#${item.serialNumber}</td>
-                                <td>${item.productName}</td>
-                                <td>${item.sort}</td>
-                                <td>${item.weight}</td>
-                            </tr>
-                        `).join('')
-        ).join('')}
-                </table>
+
+                ${tablesHtml}
+
+                <div class="grand-total">
+                    ЗАГАЛОМ: ${allItems.length} шт | ${totalWeight} кг
+                </div>
             </body>
             </html>
         `;
@@ -236,7 +299,6 @@ export default function PalletReport({ onClose }: PalletReportProps) {
         if (printWindow) {
             printWindow.document.write(printContent);
             printWindow.document.close();
-            printWindow.print();
         }
     };
 

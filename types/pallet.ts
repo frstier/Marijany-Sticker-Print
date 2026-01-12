@@ -17,4 +17,5 @@ export interface Batch {
     totalWeight: number;
     sort: string; // The sort for the *entire* batch. All items must match or be compatible.
     status: 'open' | 'closed'; // Open = building, Closed = printed/finalized
+    displayId?: string;
 }

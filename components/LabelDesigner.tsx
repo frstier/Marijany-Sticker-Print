@@ -1,37 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { zebraService } from '../services/zebraService';
-import { ZebraDevice } from '../types';
+import { ZebraDevice, LabelElement, LabelTemplate } from '../types';
+import { imageToZplGrf } from '../utils/imageToZpl';
+import { assignTemplateToRole, getAssignedTemplateId, unassignTemplateFromRole } from '../utils/templateManager';
 
-// ======================
-// TYPES
-// ======================
-export interface LabelElement {
-    id: string;
-    type: 'text' | 'barcode' | 'qrcode' | 'line' | 'box' | 'variable';
-    x: number; // Position in dots (203 dpi: 1mm = 8 dots)
-    y: number;
-    width?: number;
-    height?: number;
-    content?: string; // For text/variable
-    variableName?: string; // e.g. {weight}, {date}
-    fontSize?: number;
-    fontStyle?: 'normal' | 'bold';
-    rotation?: 0 | 90 | 180 | 270;
-    barcodeType?: 'CODE128' | 'CODE39' | 'EAN13' | 'QR';
-    barcodeHeight?: number;
-}
 
-export interface LabelTemplate {
-    id: string;
-    name: string;
-    widthMm: number;
-    heightMm: number;
-    widthDots: number;
-    heightDots: number;
-    elements: LabelElement[];
-    createdAt: string;
-    updatedAt: string;
-}
+
 
 interface LabelDesignerProps {
     onClose: () => void;
@@ -136,9 +110,8 @@ const PREDEFINED_TEMPLATES: LabelTemplate[] = [
             { id: 'h6', type: 'text', x: 500, y: 20, content: 'PALLET', fontSize: 24, rotation: 0 },
             { id: 'h7', type: 'text', x: 500, y: 50, content: 'SKU:', fontSize: 16, rotation: 0 },
             { id: 'h8', type: 'variable', x: 560, y: 50, variableName: '{sku}', fontSize: 20, rotation: 0 },
-            // Логотип буде тут (placeholder)
-            { id: 'h9', type: 'box', x: 680, y: 15, width: 100, height: 80, rotation: 0 },
-            { id: 'h10', type: 'text', x: 695, y: 45, content: 'LOGO', fontSize: 18, rotation: 0 },
+            // Логотип (100x100)
+            { id: 'h9', type: 'image', x: 680, y: 15, width: 100, height: 100, imageSrc: '/logo.bmp', rotation: 0 },
 
             { id: 'h11', type: 'line', x: 20, y: 145, width: 760, height: 2, rotation: 0 },
 
@@ -183,22 +156,29 @@ const PREDEFINED_TEMPLATES: LabelTemplate[] = [
             { id: 'b10', type: 'text', x: 410, y: 450, content: '10. #010 26.0kg', fontSize: 16, rotation: 0 },
             { id: 'bc10', type: 'barcode', x: 410, y: 470, content: 'BALE010', width: 350, barcodeHeight: 25, barcodeType: 'CODE128', rotation: 0 },
 
-            // === TOTALS ===
-            { id: 't1', type: 'line', x: 20, y: 520, width: 760, height: 2, rotation: 0 },
-            { id: 't2', type: 'text', x: 30, y: 535, content: 'Кількість:', fontSize: 22, rotation: 0 },
-            { id: 't3', type: 'variable', x: 180, y: 530, variableName: '{quantity}', fontSize: 32, rotation: 0 },
-            { id: 't4', type: 'text', x: 300, y: 535, content: 'шт', fontSize: 22, rotation: 0 },
-            { id: 't5', type: 'text', x: 420, y: 535, content: 'Вага:', fontSize: 22, rotation: 0 },
-            { id: 't6', type: 'variable', x: 520, y: 525, variableName: '{weight}', fontSize: 40, rotation: 0 },
-            { id: 't7', type: 'text', x: 700, y: 535, content: 'kg', fontSize: 22, rotation: 0 },
+            // Бейли 11-12 (нові)
+            { id: 'b11', type: 'text', x: 30, y: 510, content: '11. #011 25.4kg', fontSize: 16, rotation: 0 },
+            { id: 'bc11', type: 'barcode', x: 30, y: 530, content: 'BALE011', width: 350, barcodeHeight: 25, barcodeType: 'CODE128', rotation: 0 },
 
-            // === PALLET BARCODE ===
-            { id: 'pb1', type: 'barcode', x: 150, y: 580, content: '{barcode}', width: 500, barcodeHeight: 60, barcodeType: 'CODE128', rotation: 0 },
+            { id: 'b12', type: 'text', x: 410, y: 510, content: '12. #012 24.8kg', fontSize: 16, rotation: 0 },
+            { id: 'bc12', type: 'barcode', x: 410, y: 530, content: 'BALE012', width: 350, barcodeHeight: 25, barcodeType: 'CODE128', rotation: 0 },
 
-            // === FOOTER (адреса) ===
-            { id: 'f1', type: 'line', x: 20, y: 660, width: 760, height: 2, rotation: 0 },
-            { id: 'f2', type: 'text', x: 30, y: 675, content: '12101, Ukraine, Zhytomyr region, Zhytomyr district,', fontSize: 14, rotation: 0 },
-            { id: 'f3', type: 'text', x: 30, y: 695, content: 'Khoroshivska territorial community, Buildings complex No. 18', fontSize: 14, rotation: 0 },
+            // === TOTALS (зміщено вниз) ===
+            { id: 't1', type: 'line', x: 20, y: 580, width: 760, height: 2, rotation: 0 },
+            { id: 't2', type: 'text', x: 30, y: 595, content: 'Кількість:', fontSize: 22, rotation: 0 },
+            { id: 't3', type: 'variable', x: 180, y: 590, variableName: '{quantity}', fontSize: 32, rotation: 0 },
+            { id: 't4', type: 'text', x: 300, y: 595, content: 'шт', fontSize: 22, rotation: 0 },
+            { id: 't5', type: 'text', x: 420, y: 595, content: 'Вага:', fontSize: 22, rotation: 0 },
+            { id: 't6', type: 'variable', x: 520, y: 585, variableName: '{weight}', fontSize: 40, rotation: 0 },
+            { id: 't7', type: 'text', x: 700, y: 595, content: 'kg', fontSize: 22, rotation: 0 },
+
+            // === PALLET BARCODE (зміщено вниз) ===
+            { id: 'pb1', type: 'barcode', x: 150, y: 640, content: '{barcode}', width: 500, barcodeHeight: 60, barcodeType: 'CODE128', rotation: 0 },
+
+            // === FOOTER - адреса (зміщено вниз) ===
+            { id: 'f1', type: 'line', x: 20, y: 720, width: 760, height: 2, rotation: 0 },
+            { id: 'f2', type: 'text', x: 30, y: 735, content: '12101, Ukraine, Zhytomyr region, Zhytomyr district,', fontSize: 14, rotation: 0 },
+            { id: 'f3', type: 'text', x: 30, y: 755, content: 'Khoroshivska territorial community, Buildings complex No. 18', fontSize: 14, rotation: 0 },
         ]
     },
 
@@ -249,6 +229,45 @@ const PREDEFINED_TEMPLATES: LabelTemplate[] = [
 ];
 
 // ======================
+// ZPL PREVIEW COMPONENT (handles async)
+// ======================
+function ZplPreview({ generateZPL }: { generateZPL: () => Promise<string> }) {
+    const [zplCode, setZplCode] = useState<string>('Генерація ZPL...');
+    const [copied, setCopied] = useState(false);
+
+    useEffect(() => {
+        generateZPL().then(zpl => setZplCode(zpl)).catch(err => {
+            console.error('ZPL generation error:', err);
+            setZplCode('Помилка генерації ZPL');
+        });
+    }, [generateZPL]);
+
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(zplCode);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            console.error('Copy failed:', err);
+        }
+    };
+
+    return (
+        <div className="flex-1 p-6 overflow-auto">
+            <pre className="bg-slate-900 text-green-400 p-4 rounded-lg font-mono text-sm whitespace-pre-wrap max-h-[500px] overflow-auto">
+                {zplCode}
+            </pre>
+            <button
+                onClick={handleCopy}
+                className={`mt-4 px-4 py-2 rounded text-white transition-colors ${copied ? 'bg-green-600' : 'bg-blue-600 hover:bg-blue-700'}`}
+            >
+                {copied ? '✅ Скопійовано!' : '📋 Скопіювати ZPL'}
+            </button>
+        </div>
+    );
+}
+
+// ======================
 // MAIN COMPONENT
 // ======================
 export default function LabelDesigner({ onClose, onSave, initialTemplate, printer }: LabelDesignerProps) {
@@ -267,6 +286,9 @@ export default function LabelDesigner({ onClose, onSave, initialTemplate, printe
     const [zoom, setZoom] = useState(1);
     const [isPrinting, setIsPrinting] = useState(false);
     const [printStatus, setPrintStatus] = useState<string | null>(null);
+
+    // Role Assignment Modal State
+    const [assignModal, setAssignModal] = useState<{ isOpen: boolean; templateId: string | null; sizeId: string }>({ isOpen: false, templateId: null, sizeId: '100x100' });
 
 
 
@@ -351,6 +373,11 @@ export default function LabelDesigner({ onClose, onSave, initialTemplate, printe
                 newElement.width = 150;
                 newElement.height = 100;
                 break;
+            case 'image':
+                newElement.width = 100;
+                newElement.height = 100;
+                newElement.imageSrc = '/logo.bmp';
+                break;
         }
 
         setElements([...elements, newElement]);
@@ -412,10 +439,10 @@ export default function LabelDesigner({ onClose, onSave, initialTemplate, printe
     // ======================
     // ZPL GENERATION
     // ======================
-    const generateZPL = (): string => {
+    const generateZPL = async (): Promise<string> => {
         let zpl = `^XA\n^PW${widthDots}\n^LL${heightDots}\n^CI28\n\n`;
 
-        elements.forEach(el => {
+        for (const el of elements) {
             const rotation = el.rotation === 90 ? 'R' : el.rotation === 180 ? 'I' : el.rotation === 270 ? 'B' : 'N';
 
             switch (el.type) {
@@ -437,8 +464,22 @@ export default function LabelDesigner({ onClose, onSave, initialTemplate, printe
                 case 'box':
                     zpl += `^FO${el.x},${el.y}^GB${el.width},${el.height},2^FS\n`;
                     break;
+                case 'image':
+                    // Convert image to ZPL GRF format
+                    if (el.imageSrc) {
+                        try {
+                            const imageGrf = await imageToZplGrf(el.imageSrc, el.width, el.height);
+                            zpl += `^FO${el.x},${el.y}${imageGrf}\n`;
+                        } catch (err) {
+                            console.error('Image conversion failed:', err);
+                            // Fallback: draw box with "IMG" text
+                            zpl += `^FO${el.x},${el.y}^GB${el.width},${el.height},2^FS\n`;
+                            zpl += `^FO${el.x + 10},${el.y + Math.round((el.height || 100) / 2) - 10}^A0N,20,20^FDIMG^FS\n`;
+                        }
+                    }
+                    break;
             }
-        });
+        }
 
         zpl += `^PQ1\n^XZ`;
         return zpl;
@@ -535,6 +576,16 @@ export default function LabelDesigner({ onClose, onSave, initialTemplate, printe
                                     </div>
                                     <div className="font-bold text-white group-hover:text-blue-400 transition-colors">{tpl.name}</div>
                                     <div className="text-xs text-slate-400 mt-1">{tpl.widthMm}×{tpl.heightMm} мм</div>
+
+                                    {/* Role Badges */}
+                                    <div className="mt-2 flex gap-1 flex-wrap">
+                                        {getAssignedTemplateId('operator', '100x100') === tpl.id && (tpl.widthMm === 100) && (
+                                            <span className="px-1.5 py-0.5 bg-blue-900 text-blue-200 text-[10px] rounded border border-blue-700">Опер.</span>
+                                        )}
+                                        {getAssignedTemplateId('receiving', '100x100') === tpl.id && (tpl.widthMm === 100) && (
+                                            <span className="px-1.5 py-0.5 bg-purple-900 text-purple-200 text-[10px] rounded border border-purple-700">Облік.</span>
+                                        )}
+                                    </div>
                                 </button>
                             ))}
                         </div>
@@ -571,6 +622,25 @@ export default function LabelDesigner({ onClose, onSave, initialTemplate, printe
                                             </div>
                                             <div className="font-bold text-white group-hover:text-green-400 transition-colors">{tpl.name}</div>
                                             <div className="text-xs text-slate-400 mt-1">{tpl.widthMm}×{tpl.heightMm} мм</div>
+
+                                            {/* Role Badges */}
+                                            <div className="mt-2 flex gap-1 flex-wrap">
+                                                {getAssignedTemplateId('operator', '100x100') === tpl.id && (tpl.widthMm === 100) && (
+                                                    <span className="px-1.5 py-0.5 bg-blue-900 text-blue-200 text-[10px] rounded border border-blue-700">Опер.</span>
+                                                )}
+                                                {getAssignedTemplateId('receiving', '100x100') === tpl.id && (tpl.widthMm === 100) && (
+                                                    <span className="px-1.5 py-0.5 bg-purple-900 text-purple-200 text-[10px] rounded border border-purple-700">Облік.</span>
+                                                )}
+                                            </div>
+                                        </button>
+
+                                        {/* Assign Button */}
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setAssignModal({ isOpen: true, templateId: tpl.id, sizeId: '100x100' }); }}
+                                            className="absolute top-2 right-10 w-6 h-6 bg-blue-600 hover:bg-blue-700 rounded text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                            title="Призначити роль"
+                                        >
+                                            👤
                                         </button>
                                         <button
                                             onClick={(e) => { e.stopPropagation(); deleteSavedTemplate(tpl.id); }}
@@ -585,7 +655,49 @@ export default function LabelDesigner({ onClose, onSave, initialTemplate, printe
                         </div>
                     )}
                 </div>
+
+                {/* Assignment Modal */}
+                {assignModal.isOpen && (
+                    <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4">
+                        <div className="bg-slate-800 rounded-xl p-6 max-w-sm w-full border border-slate-700">
+                            <h3 className="text-white font-bold text-lg mb-4">Налаштування ролей</h3>
+                            <p className="text-slate-400 text-sm mb-6">Оберіть роль, для якої цей шаблон буде основним (для розміру 100x100):</p>
+
+                            <div className="space-y-3">
+                                <button
+                                    onClick={() => {
+                                        if (assignModal.templateId) assignTemplateToRole('operator', '100x100', assignModal.templateId);
+                                        setAssignModal({ ...assignModal, isOpen: false });
+                                    }}
+                                    className="w-full flex justify-between items-center bg-slate-700 hover:bg-blue-900/50 hover:border-blue-500 border border-transparent p-3 rounded-lg transition-all text-white"
+                                >
+                                    <span>👷 Оператор</span>
+                                    {getAssignedTemplateId('operator', '100x100') === assignModal.templateId && <span className="text-blue-400">✅</span>}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (assignModal.templateId) assignTemplateToRole('receiving', '100x100', assignModal.templateId);
+                                        setAssignModal({ ...assignModal, isOpen: false });
+                                    }}
+                                    className="w-full flex justify-between items-center bg-slate-700 hover:bg-purple-900/50 hover:border-purple-500 border border-transparent p-3 rounded-lg transition-all text-white"
+                                >
+                                    <span>📝 Обліковець</span>
+                                    {getAssignedTemplateId('receiving', '100x100') === assignModal.templateId && <span className="text-purple-400">✅</span>}
+                                </button>
+                            </div>
+
+                            <button
+                                onClick={() => setAssignModal({ ...assignModal, isOpen: false })}
+                                className="mt-6 w-full py-2 bg-slate-700 text-slate-300 rounded hover:bg-slate-600 transition-colors font-bold"
+                            >
+                                Закрити
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
+
+
         );
     }
 
@@ -675,6 +787,9 @@ export default function LabelDesigner({ onClose, onSave, initialTemplate, printe
                         <button onClick={() => addElement('box')} className="bg-slate-700 hover:bg-slate-600 p-2 rounded text-xs flex items-center gap-1">
                             <span>⬜</span> Рамка
                         </button>
+                        <button onClick={() => addElement('image')} className="bg-slate-700 hover:bg-slate-600 p-2 rounded text-xs flex items-center gap-1">
+                            <span>🖼️</span> Лого
+                        </button>
                     </div>
                 </div>
 
@@ -709,6 +824,7 @@ export default function LabelDesigner({ onClose, onSave, initialTemplate, printe
                                     {el.type === 'qrcode' && `⬛ QR Code`}
                                     {el.type === 'line' && `➖ Лінія`}
                                     {el.type === 'box' && `⬜ Рамка`}
+                                    {el.type === 'image' && `🖼️ Лого`}
                                 </span>
                                 <button
                                     onClick={(e) => { e.stopPropagation(); deleteElement(el.id); }}
@@ -739,7 +855,7 @@ export default function LabelDesigner({ onClose, onSave, initialTemplate, printe
                             setIsPrinting(true);
                             setPrintStatus('⏳ Друк...');
                             try {
-                                const zpl = generateZPL();
+                                const zpl = await generateZPL();
                                 await zebraService.print(printer, zpl);
                                 setPrintStatus('✅ Надруковано!');
                             } catch (err) {
@@ -797,17 +913,7 @@ export default function LabelDesigner({ onClose, onSave, initialTemplate, printe
 
                 {showZplPreview ? (
                     /* ZPL Preview */
-                    <div className="flex-1 p-6 overflow-auto">
-                        <pre className="bg-slate-900 text-green-400 p-4 rounded-lg font-mono text-sm whitespace-pre-wrap">
-                            {generateZPL()}
-                        </pre>
-                        <button
-                            onClick={() => navigator.clipboard.writeText(generateZPL())}
-                            className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
-                        >
-                            📋 Скопіювати ZPL
-                        </button>
-                    </div>
+                    <ZplPreview generateZPL={generateZPL} />
                 ) : (
                     /* Visual Canvas */
                     <div className="flex-1 flex items-center justify-center p-8 overflow-auto">
@@ -889,6 +995,26 @@ export default function LabelDesigner({ onClose, onSave, initialTemplate, printe
                                                 height: (el.height || 100) * canvasScale,
                                             }}
                                         />
+                                    )}
+                                    {el.type === 'image' && (
+                                        <div
+                                            className="border border-slate-400 bg-white overflow-hidden flex items-center justify-center"
+                                            style={{
+                                                width: (el.width || 100) * canvasScale,
+                                                height: (el.height || 100) * canvasScale,
+                                            }}
+                                        >
+                                            {el.imageSrc ? (
+                                                <img
+                                                    src={el.imageSrc}
+                                                    alt="logo"
+                                                    className="w-full h-full object-contain"
+                                                    style={{ filter: 'grayscale(100%)' }}
+                                                />
+                                            ) : (
+                                                <span className="text-xs text-slate-400">🖼️</span>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             ))}

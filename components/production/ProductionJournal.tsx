@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ProductionItem, ItemStatus } from '../../types/production';
 import { ProductionService } from '../../services/productionService';
+import { PalletService } from '../../services/palletService';
+import { Batch } from '../../types/pallet';
 
 interface Props {
     onClose: () => void;
@@ -8,6 +10,7 @@ interface Props {
 
 export default function ProductionJournal({ onClose }: Props) {
     const [items, setItems] = useState<ProductionItem[]>([]);
+    const [batches, setBatches] = useState<Batch[]>([]);
     const [filter, setFilter] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -19,15 +22,19 @@ export default function ProductionJournal({ onClose }: Props) {
     const [formData, setFormData] = useState<Partial<ProductionItem>>({});
 
     useEffect(() => {
-        loadItems();
+        loadData();
     }, []);
 
-    const loadItems = async () => {
+    const loadData = async () => {
         setLoading(true);
         try {
-            const data = await ProductionService.getAllItems();
+            const [data, loadedBatches] = await Promise.all([
+                ProductionService.getAllItems(),
+                PalletService.getBatches()
+            ]);
+            setBatches(loadedBatches);
+
             // Accountant only sees items that have been graded (have sort assigned)
-            // Created items without sort are Lab's responsibility
             const gradedOnly = data.filter(i => i.sort && i.sort.trim() !== '');
             setItems(gradedOnly.sort((a, b) => b.serialNumber - a.serialNumber));
         } finally {
@@ -35,10 +42,17 @@ export default function ProductionJournal({ onClose }: Props) {
         }
     };
 
+    const getBatchDisplay = (batchId: string | undefined) => {
+        if (!batchId) return '-';
+        const batch = batches.find(b => b.id === batchId);
+        return batch?.displayId || batch?.id || batchId;
+    };
+
     const filteredItems = items.filter(i =>
         i.serialNumber.toString().includes(filter) ||
         i.barcode.toLowerCase().includes(filter.toLowerCase()) ||
-        i.productName.toLowerCase().includes(filter.toLowerCase())
+        i.productName.toLowerCase().includes(filter.toLowerCase()) ||
+        (i.batchId && getBatchDisplay(i.batchId).toLowerCase().includes(filter.toLowerCase()))
     );
 
     const handleEdit = (item: ProductionItem) => {
@@ -86,7 +100,7 @@ export default function ProductionJournal({ onClose }: Props) {
                 await ProductionService.updateItem(newItem);
             }
             setEditingItem(null);
-            loadItems();
+            loadData();
         } catch (e) {
             console.error(e);
             alert('Error saving item');
@@ -96,24 +110,44 @@ export default function ProductionJournal({ onClose }: Props) {
     const handleDelete = async (id: string) => {
         if (confirm('Видалити цей запипис? Це незворотно.')) {
             await ProductionService.deleteItem(id);
-            loadItems();
+            loadData();
         }
     };
 
-    const handleReprint = async (item: ProductionItem) => {
-        // Mock reprint for now, or use ZebraService if available globally
-        alert(`Друк наліпки для #${item.serialNumber} надіслано!`);
+    const handleReturnToLab = async (item: ProductionItem) => {
+        if (confirm(`Повернути бейл #${item.serialNumber} в Лабораторію на перевірку?`)) {
+            try {
+                await ProductionService.returnToLab(item.id);
+                loadData(); // Reload to remove from graded list or update status
+            } catch (e) {
+                alert("Помилка при поверненні в лабораторію");
+            }
+        }
+    };
+
+    const handleDisbandPallet = async (batchId: string) => {
+        const display = getBatchDisplay(batchId);
+        if (confirm(`Ви впевнені, що хочете РОЗФОРМУВАТИ палету ${display}?\n\nВсі бейли повернуться до статусу 'Оцінено' і стануть доступні для нових палет.`)) {
+            try {
+                await PalletService.disbandBatch(batchId);
+                loadData();
+                alert(`Палету ${display} розформовано.`);
+            } catch (e) {
+                console.error(e);
+                alert("Помилка розформування палети");
+            }
+        }
     };
 
     return (
         <div className="fixed inset-0 z-50 bg-slate-900/95 backdrop-blur flex flex-col pt-16 pb-4 px-4 overflow-hidden">
-            <div className="max-w-6xl w-full mx-auto bg-white rounded-xl shadow-2xl flex flex-col h-full overflow-hidden">
+            <div className="max-w-7xl w-full mx-auto bg-white rounded-xl shadow-2xl flex flex-col h-full overflow-hidden">
 
                 {/* Header */}
                 <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
                     <div>
                         <h2 className="text-xl font-bold text-slate-800">Журнал Виробництва</h2>
-                        <p className="text-xs text-slate-500">Перегляд оцінених бейлів (тільки читання)</p>
+                        <p className="text-xs text-slate-500">Перегляд оцінених бейлів</p>
                     </div>
                     <div className="flex gap-2">
                         <button onClick={onClose} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-bold">
@@ -126,7 +160,7 @@ export default function ProductionJournal({ onClose }: Props) {
                 <div className="p-4 border-b border-slate-200 bg-white">
                     <input
                         type="text"
-                        placeholder="Пошук по номеру, штрихкоду..."
+                        placeholder="Пошук по номеру, штрихкоду або ID палети..."
                         className="w-full md:w-96 px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none"
                         value={filter}
                         onChange={e => setFilter(e.target.value)}
@@ -145,11 +179,12 @@ export default function ProductionJournal({ onClose }: Props) {
                                 <th className="p-4 border-b text-center">Сорт</th>
                                 <th className="p-4 border-b text-center">Статус</th>
                                 <th className="p-4 border-b text-right">Палета</th>
+                                <th className="p-4 border-b text-center">Дії</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-200 bg-white">
                             {filteredItems.map(item => (
-                                <tr key={item.id} className="hover:bg-blue-50 transition-colors">
+                                <tr key={item.id} className="hover:bg-blue-50 transition-colors group">
                                     <td className="p-4 font-mono font-bold text-slate-700">#{item.serialNumber}</td>
                                     <td className="p-4 text-sm text-slate-600">{item.date}</td>
                                     <td className="p-4 text-sm font-medium">{item.productName}</td>
@@ -164,8 +199,32 @@ export default function ProductionJournal({ onClose }: Props) {
                                     <td className="p-4 text-center">
                                         <StatusBadge status={item.status} />
                                     </td>
-                                    <td className="p-4 text-right text-xs text-slate-400">
-                                        {item.batchId ? `Палета #${item.batchId}` : '-'}
+                                    <td className="p-4 text-right text-xs">
+                                        {item.batchId ? (
+                                            <div className="flex items-center justify-end gap-2">
+                                                <span className="font-mono font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded">
+                                                    {getBatchDisplay(item.batchId)}
+                                                </span>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleDisbandPallet(item.batchId!); }}
+                                                    className="w-6 h-6 flex items-center justify-center bg-red-100 text-red-600 rounded hover:bg-red-200 transition-colors opacity-0 group-hover:opacity-100"
+                                                    title="Розформувати палету"
+                                                >
+                                                    🗑️
+                                                </button>
+                                            </div>
+                                        ) : <span className="text-slate-300">-</span>}
+                                    </td>
+                                    <td className="p-4 text-center">
+                                        <div className="flex items-center justify-center gap-2">
+                                            <button
+                                                onClick={() => handleReturnToLab(item)}
+                                                className="bg-orange-100 hover:bg-orange-200 text-orange-700 px-2 py-1 rounded text-xs font-bold transition-colors border border-orange-200"
+                                                title="Повернути в Лабораторію (скинути статус)"
+                                            >
+                                                🧪 Lab
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}

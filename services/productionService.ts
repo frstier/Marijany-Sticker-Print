@@ -52,8 +52,13 @@ export const ProductionService = {
                 createdAt: i.created_at,
                 // labUserId: i.lab_user_id, // Add if needed
                 labUserId: i.lab_user_id,
+                labNotes: i.lab_notes, // Map from DB
                 operatorId: i.operator_id,
-                batchId: i.batch_id
+                batchId: i.batch_id,
+                updatedAt: i.updated_at, // Vital for tracking grading time
+                gradedAt: i.updated_at, // Proxy for gradedAt since we update updated_at on grading
+                importBatchId: i.import_batch_id, // For Print Hub grouping
+                printedAt: i.printed_at // For Print Hub status tracking
             }));
         } catch (e) {
             console.error("Supabase Fetch Failed, falling back to local", e);
@@ -137,6 +142,7 @@ export const ProductionService = {
                 date: item.date,
                 status: item.status,
                 sort: item.sort,
+                lab_notes: item.labNotes, // Map to DB
                 barcode: item.barcode,
                 created_at: item.createdAt || new Date().toISOString(),
                 operator_id: item.operatorId
@@ -370,7 +376,7 @@ export const ProductionService = {
         }
     },
 
-    async gradeItem(id: string, sort: string, userId: string): Promise<ProductionItem> {
+    async gradeItem(id: string, sort: string, userId: string, notes?: string): Promise<ProductionItem> {
         if (USE_SUPABASE && supabase) {
             try {
                 const { data, error } = await supabase
@@ -378,6 +384,7 @@ export const ProductionService = {
                     .update({
                         status: 'graded',
                         sort: sort,
+                        lab_notes: notes, // Save notes
                         lab_user_id: userId,
                         updated_at: new Date().toISOString()
                     })
@@ -397,6 +404,7 @@ export const ProductionService = {
                     date: data.date,
                     status: data.status,
                     sort: data.sort,
+                    labNotes: data.lab_notes,
                     barcode: data.barcode,
                     createdAt: data.created_at,
                     updatedAt: data.updated_at
@@ -417,6 +425,7 @@ export const ProductionService = {
             status: 'graded' as const,
             sort,
             gradedAt: new Date().toISOString(),
+            labNotes: notes,
             labUserId: userId
         };
         items[idx] = updatedItem;
@@ -432,6 +441,7 @@ export const ProductionService = {
                     .update({
                         status: 'created',
                         sort: null,
+                        lab_notes: null,
                         lab_user_id: null,
                         updated_at: new Date().toISOString()
                     })
@@ -451,6 +461,46 @@ export const ProductionService = {
                 status: 'created',
                 sort: undefined,
                 gradedAt: undefined,
+                labNotes: undefined,
+                labUserId: undefined
+            };
+            this.saveItemsLocal(items);
+        }
+    },
+
+    // --- Return to Lab ---
+    async returnToLab(id: string): Promise<void> {
+        if (USE_SUPABASE && supabase) {
+            try {
+                // Reset to 'created', clear sort/notes
+                const { error } = await supabase
+                    .from('production_items')
+                    .update({
+                        status: 'created',
+                        sort: null,
+                        lab_notes: null,
+                        lab_user_id: null,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', id);
+
+                if (error) throw error;
+                return;
+            } catch (e) {
+                console.error("Supabase ReturnToLab Failed", e);
+                throw e;
+            }
+        }
+
+        // Fallback Local
+        const items = this.getItemsLocal();
+        const idx = items.findIndex(i => i.id === id);
+        if (idx !== -1) {
+            items[idx] = {
+                ...items[idx],
+                status: 'created',
+                sort: undefined,
+                labNotes: undefined,
                 labUserId: undefined
             };
             this.saveItemsLocal(items);
@@ -475,9 +525,12 @@ export const ProductionService = {
                     date: item.date,
                     status: item.status,
                     sort: item.sort,
+                    lab_notes: item.labNotes,
                     barcode: item.barcode,
                     created_at: item.createdAt || new Date().toISOString(),
-                    operator_id: item.operatorId
+                    operator_id: item.operatorId,
+                    import_batch_id: item.importBatchId || null,
+                    printed_at: item.printedAt || null
                 };
 
                 const { data, error } = await supabase
@@ -538,6 +591,28 @@ export const ProductionService = {
         this.saveItemsLocal(filtered);
     },
 
+    async setPrintedStatus(id: string, printedAt: string): Promise<void> {
+        if (USE_SUPABASE && supabase) {
+            try {
+                const { error } = await supabase
+                    .from('production_items')
+                    .update({ printed_at: printedAt })
+                    .eq('id', id);
+
+                if (error) console.error("Supabase Print Status Error", error);
+            } catch (e) { console.error("Supabase Print Status Failed", e); }
+            return;
+        }
+
+        // Fallback Local
+        const items = this.getItemsLocal();
+        const idx = items.findIndex(i => i.id === id);
+        if (idx !== -1) {
+            items[idx].printedAt = printedAt;
+            this.saveItemsLocal(items);
+        }
+    },
+
     // --- Mock Data Generator (Keep for Fallback) ---
     generateMockData(): ProductionItem[] {
         const mockItems: ProductionItem[] = [];
@@ -561,5 +636,81 @@ export const ProductionService = {
         }
         this.saveItemsLocal(mockItems);
         return mockItems;
+    },
+
+    // --- Serial Number Management ---
+
+    /**
+     * Find item by serial number AND product name
+     * Returns null if not found
+     */
+    async findBySerialAndProduct(serialNumber: number, productName: string): Promise<ProductionItem | null> {
+        if (USE_SUPABASE && supabase) {
+            try {
+                const { data, error } = await supabase
+                    .from('production_items')
+                    .select('*')
+                    .eq('serial_number', serialNumber)
+                    .eq('product_name', productName)
+                    .maybeSingle();
+
+                if (error) throw error;
+                if (!data) return null;
+
+                return {
+                    id: data.id,
+                    barcode: data.barcode,
+                    date: data.date,
+                    productName: data.product_name,
+                    productNameEn: data.product_name_en,
+                    serialNumber: data.serial_number,
+                    weight: data.weight,
+                    status: data.status,
+                    sort: data.sort,
+                    createdAt: data.created_at,
+                    labNotes: data.lab_notes,
+                    operatorId: data.operator_id,
+                    batchId: data.batch_id,
+                    importBatchId: data.import_batch_id,
+                    printedAt: data.printed_at
+                };
+            } catch (e) {
+                console.error("Supabase findBySerialAndProduct failed", e);
+                return null;
+            }
+        }
+
+        // Local fallback
+        const items = this.getItemsLocal();
+        return items.find(i => i.serialNumber === serialNumber && i.productName === productName) || null;
+    },
+
+    /**
+     * Get maximum serial number for a specific product
+     * Returns 0 if no items found
+     */
+    async getMaxSerialNumber(productName: string): Promise<number> {
+        if (USE_SUPABASE && supabase) {
+            try {
+                const { data, error } = await supabase
+                    .from('production_items')
+                    .select('serial_number')
+                    .eq('product_name', productName)
+                    .order('serial_number', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                if (error) throw error;
+                return data?.serial_number || 0;
+            } catch (e) {
+                console.error("Supabase getMaxSerialNumber failed", e);
+                return 0;
+            }
+        }
+
+        // Local fallback
+        const items = this.getItemsLocal().filter(i => i.productName === productName);
+        if (items.length === 0) return 0;
+        return Math.max(...items.map(i => i.serialNumber));
     }
 };

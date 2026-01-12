@@ -180,6 +180,9 @@ export function useHistory() {
         return new Date(dateStr); // Fallback
     };
 
+    // Aggregation State
+    const [reportAggregation, setReportAggregation] = useState<any[]>([]);
+
     async function generateReport(startDate: Date, endDate: Date) {
         let data: LabelData[] = [];
         try {
@@ -193,12 +196,11 @@ export function useHistory() {
             console.log("Using local history state for report generation");
             data = history.filter(item => {
                 const itemDate = parseDateStr(item.date);
-                // Compare timestamps if available for precision, otherwise day comparison
                 return itemDate >= startDate && itemDate <= endDate;
             });
         }
 
-        // Merge QUEUE (Deferred items) if they match date range
+        // Merge QUEUE (Deferred items)
         try {
             const queueStr = localStorage.getItem('zebra_deferred_queue_v1');
             if (queueStr) {
@@ -208,73 +210,101 @@ export function useHistory() {
                     const itemDate = ts.includes('T') ? new Date(ts) : parseDateStr(item.date);
                     return itemDate >= startDate && itemDate <= endDate;
                 });
-
-                // Append Deferred Items
                 data = [...data, ...deferredItems];
-
-                // Sort by date descending (newest first)
                 data.sort((a, b) => {
                     const dateA = new Date((a as any).timestamp || parseDateStr(a.date)).getTime();
                     const dateB = new Date((b as any).timestamp || parseDateStr(b.date)).getTime();
                     return dateB - dateA;
                 });
             }
-        } catch (e) {
-            console.error("Failed to merge deferred queue into report", e);
-        }
+        } catch (e) { console.error("Failed to merge deferred queue", e); }
 
         setReportData(data);
 
-        // Calculate Summary
+        // Calculate Summary (Total)
         const weight = data.reduce((sum, item) => sum + (parseFloat(item.weight) || 0), 0);
         setReportSummary({
             count: data.length,
             totalWeight: parseFloat(weight.toFixed(3))
         });
+
+        // Calculate Aggregation (By Product)
+        const aggMap: Record<string, { count: number, weight: number }> = {};
+        data.forEach(item => {
+            const key = item.product?.name || 'Unknown';
+            if (!aggMap[key]) aggMap[key] = { count: 0, weight: 0 };
+            aggMap[key].count++;
+            aggMap[key].weight += parseFloat(item.weight) || 0;
+        });
+
+        const aggList = Object.entries(aggMap).map(([name, stats]) => ({
+            name,
+            count: stats.count,
+            weight: parseFloat(stats.weight.toFixed(3))
+        })).sort((a, b) => b.weight - a.weight);
+
+        setReportAggregation(aggList);
+
         return data;
     }
 
     // Export Logic
-    // Export Logic
-
-    // Shared Data Mapping Helper
     const getDataForExport = (dataset: LabelData[]) => {
         return dataset.map(item => {
             let dateObj: Date = parseDateStr(item.date);
-            // If timestamp exists, prefer it for Time info
-            if (item.timestamp) {
-                dateObj = new Date(item.timestamp);
-            }
-
-            const statusMap: Record<string, string> = {
-                'ok': 'ОК',
-                'error': 'Помилка',
-                'cancelled': 'Відмінено',
-                'deferred': 'Відкладено'
-            };
-            const statusLabel = statusMap[item.status || 'ok'] || item.status || 'OK';
+            if (item.timestamp) dateObj = new Date(item.timestamp);
 
             return {
                 "Дата": dateObj.toLocaleDateString('uk-UA'),
-                "Час": dateObj.toLocaleTimeString('uk-UA'),
-                "Продукт": item.product?.name || "",
-                "SKU": item.product?.sku || "",
+                "UID": item.barcode || "", // Renamed from Barcode
                 "№": item.serialNumber,
-                "Сорт/Фракція": item.sortValue || "",
+                "Продукт": item.product?.name || "",
                 "Вага (кг)": Number(item.weight),
-                "Штрих-код": item.barcode || "",
-                "Оператор": item.operatorName || "",
-                "ID Зміни": item.shiftId || "",
-                "Статус": statusLabel
+                "Сорт": item.sortValue || item.sortLabel || "-"
             };
         });
     };
 
     const generateXLSXFile = (dataset: LabelData[]): File => {
-        const data = getDataForExport(dataset);
-        const ws = utils.json_to_sheet(data);
+        // 1. Prepare Data
+        const detailsData = getDataForExport(dataset);
+
+        // 2. Prepare Summary Data
+        const aggMap: Record<string, { count: number, weight: number }> = {};
+        dataset.forEach(item => {
+            const key = item.product?.name || 'Unknown';
+            if (!aggMap[key]) aggMap[key] = { count: 0, weight: 0 };
+            aggMap[key].count++;
+            aggMap[key].weight += parseFloat(item.weight) || 0;
+        });
+
+        const summaryData = Object.entries(aggMap).map(([name, stats]) => ({
+            "Продукт": name,
+            "Кількість (шт)": stats.count,
+            "Вага (кг)": parseFloat(stats.weight.toFixed(3))
+        }));
+
+        // Add Total Row
+        const totalCount = dataset.length;
+        const totalWeight = dataset.reduce((sum, item) => sum + (parseFloat(item.weight) || 0), 0);
+        summaryData.push({
+            "Продукт": "ВСЬОГО",
+            "Кількість (шт)": totalCount,
+            "Вага (кг)": parseFloat(totalWeight.toFixed(3))
+        });
+
+        // 3. Create Workbook with 2 Sheets
         const wb = utils.book_new();
-        utils.book_append_sheet(wb, ws, "Report");
+
+        const wsSummary = utils.json_to_sheet(summaryData);
+        // Style columns for Summary
+        wsSummary['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 15 }];
+        utils.book_append_sheet(wb, wsSummary, "Зведення");
+
+        const wsDetails = utils.json_to_sheet(detailsData);
+        // Style columns for Details: Date, UID, No, Product, Weight, Sort
+        wsDetails['!cols'] = [{ wch: 12 }, { wch: 25 }, { wch: 10 }, { wch: 30 }, { wch: 12 }, { wch: 10 }];
+        utils.book_append_sheet(wb, wsDetails, "Деталі");
 
         // Use 'array' type for Blob/File creation
         const wbout = write(wb, { bookType: 'xlsx', type: 'array' });
@@ -284,12 +314,11 @@ export function useHistory() {
         return new File([blob], filename, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     };
 
-    // Helper to get raw CSV string (Legacy support if needed, or for quick debug)
     const getCSVContent = (dataset: LabelData[] = history): string => {
         const BOM = "\uFEFF";
-        const headers = ["Дата", "Час", "Продукт", "SKU", "№", "Сорт/Фракція", "Вага (кг)", "Статус"];
+        const headers = ["Дата", "Час", "Продукт", "SKU", "№", "Сорт", "Вага (кг)", "Статус"];
         const rows = getDataForExport(dataset).map(r =>
-            [r["Дата"], r["Час"], r["Продукт"], r["SKU"], (r as any)["№"], r["Сорт/Фракція"], r["Вага (кг)"], r["Статус"]]
+            [r["Дата"], r["Час"], r["Продукт"], r["SKU"], (r as any)["№"], r["Сорт"], r["Вага (кг)"], r["Статус"]]
                 .map(val => `"${(val || '').toString().replace(/"/g, '""')}"`)
                 .join(",")
         );
@@ -298,9 +327,6 @@ export function useHistory() {
 
     const exportCsv = async (dataset: LabelData[] = history) => {
         if (dataset.length === 0) { alert("Дані для експорту відсутні"); return; }
-        // ... (Keep existing implementation if needed or just alias to Xlsx if user wants ONLY Xlsx)
-        // User said "default to XLSX instead of CSV" implying CSV replacement in automatic flows.
-        // We'll keep exportCsv as CSV for manual button, but usage in sendEmail will change.
         if (Capacitor.isNativePlatform()) {
             try {
                 const csvContent = getCSVContent(dataset);
@@ -314,7 +340,6 @@ export function useHistory() {
                 alert(`✅ CSV збережено: ${fileName}`);
             } catch (e) { alert('❌ Error: ' + e); }
         } else {
-            // Web fallback
             const csvContent = getCSVContent(dataset);
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
@@ -329,26 +354,27 @@ export function useHistory() {
     const exportXlsx = async (dataset: LabelData[] = history) => {
         if (dataset.length === 0) { alert("Дані для експорту відсутні"); return; }
 
-        const filename = `ZebraReport_${new Date().toISOString().split('T')[0]}_${Date.now()}.xlsx`;
-        const data = getDataForExport(dataset);
-        const ws = utils.json_to_sheet(data);
-        const wb = utils.book_new();
-        utils.book_append_sheet(wb, ws, "Report");
+        const file = generateXLSXFile(dataset);
+        const filename = file.name;
 
+        // For Native: need base64
         if (Capacitor.isNativePlatform()) {
-            const wbout = write(wb, { bookType: 'xlsx', type: 'base64' });
-            try {
-                await Filesystem.writeFile({
-                    path: filename,
-                    data: wbout,
-                    directory: Directory.Documents
-                });
-                alert(`✅ Excel збережено у Documents:\n${filename}`);
-            } catch (e) { alert('❌ Excel save failed: ' + e); }
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+                const base64data = (reader.result as string).split(',')[1];
+                try {
+                    await Filesystem.writeFile({
+                        path: filename,
+                        data: base64data,
+                        directory: Directory.Documents
+                    });
+                    alert(`✅ Excel збережено у Documents:\n${filename}`);
+                } catch (e) { alert('❌ Excel save failed: ' + e); }
+            };
+            reader.readAsDataURL(file);
         } else {
-            const wbout = write(wb, { bookType: 'xlsx', type: 'array' });
-            const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-            const url = URL.createObjectURL(blob);
+            // Web
+            const url = URL.createObjectURL(file);
             const link = document.createElement('a');
             link.href = url;
             link.download = filename;
@@ -378,7 +404,25 @@ export function useHistory() {
         const count = dataset.length;
         const totalWeight = dataset.reduce((sum, item) => sum + (parseFloat(item.weight) || 0), 0).toFixed(3);
         const subject = `Звіт виробництва ${dateStr}`;
-        const body = `Звіт за ${dateStr}\nКількість: ${count} шт\nВага: ${totalWeight} кг\n\nФайл .xlsx додається.`;
+
+        // Generate body with aggregation
+        let body = `Звіт за ${dateStr}\n\nЗАГАЛОМ:\nКількість: ${count} шт\nВага: ${totalWeight} кг\n\n`;
+
+        // Add simple aggregation text to email body too
+        const aggMap: Record<string, { count: number, weight: number }> = {};
+        dataset.forEach(item => {
+            const key = item.product?.name || 'Unknown';
+            if (!aggMap[key]) aggMap[key] = { count: 0, weight: 0 };
+            aggMap[key].count++;
+            aggMap[key].weight += parseFloat(item.weight) || 0;
+        });
+
+        body += "ПО ПРОДУКТАХ:\n";
+        Object.entries(aggMap).forEach(([name, stats]) => {
+            body += `- ${name}: ${stats.count} шт, ${stats.weight.toFixed(1)} кг\n`;
+        });
+
+        body += `\nФайл Excel (.xlsx) з деталями та зведенням додається.`;
 
         // 1. Generate XLSX File
         const file = generateXLSXFile(dataset);
@@ -389,11 +433,10 @@ export function useHistory() {
             const recipient = reportEmail || localStorage.getItem('zebra_report_email_v1') || '';
             if (recipient) {
                 try {
-                    await EmailService.sendReport(dataset, recipient);
+                    await EmailService.sendReport(dataset, recipient, file); // Updated to pass file
                     return { success: true, message: `Звіт відправлено на ${recipient}`, file };
                 } catch (e) {
                     console.error("EmailJS sending failed", e);
-                    // Continue to fallback
                 }
             }
         }
@@ -409,46 +452,17 @@ export function useHistory() {
                 return { success: true, message: "Відкрито вікно відправки", file };
             } catch (err) {
                 console.warn("Share failed", err);
-                // Continue to fallback
             }
         }
 
-        // 4. Last Resort: Just return the file for manual download
         return { success: false, message: "Авто-відправка не вдалася. Спробуйте завантажити файл вручну.", file };
-    };
-
-    // OLD checkDuplicate removed - now using enhanced BETA version defined above
-
-    // TEST: Generate Dummy Data
-    const addDummyData = async () => {
-        const products = [
-            { id: 'marijany_b8_hemp', name: 'Marijany B8 Hemp', sku: 'MJ-B8-HMP', category: 'shiv' as const },
-            { id: 'marijany_classic', name: 'Marijany Classic', sku: 'MJ-CLS', category: 'fiber' as const },
-            { id: 'marijany_gold', name: 'Marijany Gold', sku: 'MJ-GLD', category: 'dust' as const }
-        ];
-
-        for (let i = 0; i < 5; i++) {
-            const randomProd = products[Math.floor(Math.random() * products.length)];
-            const entry: LabelData = {
-                id: crypto.randomUUID(),
-                date: new Date().toISOString(), // Today
-                product: randomProd,
-                weight: (Math.random() * 2 + 0.5).toFixed(3),
-                serialNumber: Math.floor(Math.random() * 1000) + 1000,
-                sortLabel: Math.random() > 0.5 ? '1 Сорт' : '2 Сорт',
-                sortValue: '1',
-                status: 'ok'
-            };
-            await addToHistory(entry);
-        }
-        alert("Додано 5 тестових записів за сьогодні!");
     };
 
     return {
         history,
         checkDuplicate,
         addToHistory,
-        addDummyData, // Exporting helper
+        // addDummyData, // Removed
         clearHistory,
         exportCsv,
         exportXlsx,
@@ -458,6 +472,7 @@ export function useHistory() {
         // Reporting
         generateReport,
         reportSummary,
+        reportAggregation, // Exposed
         reportData,
         updateHistoryEntry,
         deleteHistoryEntry

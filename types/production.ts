@@ -17,9 +17,14 @@ export interface ProductionItem {
 
     // Lab Data
     sort?: string;
+    labNotes?: string; // Added field
     gradedAt?: string;
     labUserId?: string;
     operatorId?: string; // Operator who printed it
+
+    // Import / Batch Print Data
+    importBatchId?: string;
+    printedAt?: string;
 
     // Accountant Data
     batchId?: string; // If palletized

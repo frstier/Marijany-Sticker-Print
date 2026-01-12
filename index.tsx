@@ -36,7 +36,6 @@ window.addEventListener('unhandledrejection', (event) => {
 
 
 import { AuthProvider } from './hooks/useAuth';
-import { ThemeProvider } from './hooks/useTheme';
 
 console.log("Sticker Print App Starting...");
 
@@ -44,11 +43,9 @@ try {
   root.render(
     <React.StrictMode>
       <GlobalErrorBoundary>
-        <ThemeProvider>
-          <AuthProvider>
-            <App />
-          </AuthProvider>
-        </ThemeProvider>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
       </GlobalErrorBoundary>
     </React.StrictMode>
   );

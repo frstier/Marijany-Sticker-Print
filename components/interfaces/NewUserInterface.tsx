@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import PalletBuilder from '../pallet/PalletBuilder';
 import ProductionJournal from '../production/ProductionJournal';
-import PalletReport from '../reports/PalletReport';
+import AccountantReport from '../reports/AccountantReport';
 import { ProductionService } from '../../services/productionService';
 import { ProductionItem } from '../../types/production';
 import { PalletService } from '../../services/palletService';
@@ -11,6 +11,9 @@ import { zebraService } from '../../services/zebraService';
 import { usePrinter } from '../../hooks/usePrinter';
 import NotificationBanner from '../ui/NotificationBanner';
 import { NotificationService, NOTIFICATION_THRESHOLD } from '../../services/notificationService';
+import ConfirmDialog from '../ConfirmDialog';
+import ThemeToggle from '../ThemeToggle';
+import { imageToZplGrf } from '../../utils/imageToZpl';
 
 type ViewMode = 'stock' | 'pallets' | 'journal';
 
@@ -40,6 +43,10 @@ export default function NewUserInterface() {
     const [pendingCount, setPendingCount] = useState(0);
     const [showNotification, setShowNotification] = useState(true);
 
+    // Dialog states
+    const [disbandConfirm, setDisbandConfirm] = useState<{ isOpen: boolean; palletId: string | null }>({ isOpen: false, palletId: null });
+    const [alertDialog, setAlertDialog] = useState<{ isOpen: boolean; message: string }>({ isOpen: false, message: '' });
+
     // Load data
     useEffect(() => {
         loadData();
@@ -56,7 +63,7 @@ export default function NewUserInterface() {
                 const items = await ProductionService.getGradedItems();
                 setWarehouseItems(items);
             } else if (activeView === 'pallets') {
-                const allPallets = PalletService.getBatches();
+                const allPallets = await PalletService.getBatches();
                 setPallets(allPallets.filter(p => p.status === 'closed'));
             }
         } catch (e) {
@@ -120,19 +127,46 @@ export default function NewUserInterface() {
         }
     };
 
-    // Print pallet label
     const printPalletLabel = async (batch: Batch) => {
-        const zpl = generatePalletZPL(batch);
+        const zpl = await generatePalletZPL(batch);
         if (printerData.printer) {
             await zebraService.print(printerData.printer, zpl);
         } else {
             console.log("--- PALLET MOCK PRINT ---");
             console.log(zpl);
-            alert(`Друк палети ${batch.id}`);
+            setAlertDialog({ isOpen: true, message: `Друк палети ${batch.id}` });
         }
     };
 
-    const generatePalletZPL = (batch: Batch) => {
+    // Disband Pallet Logic
+    const requestDisbandPallet = (palletId: string) => {
+        setDisbandConfirm({ isOpen: true, palletId });
+    };
+
+    const handleDisbandPallet = async () => {
+        const palletId = disbandConfirm.palletId;
+        setDisbandConfirm({ isOpen: false, palletId: null });
+        if (!palletId) return;
+
+        setLoading(true);
+        try {
+            // Get items first to unpalletize
+            const items = await ProductionService.getItemsByBatchId(palletId);
+            await PalletService.disbandBatch(palletId);
+            if (items.length > 0) {
+                // Use unpalletizeItems to reset status to 'graded'
+                await ProductionService.unpalletizeItems(items.map(i => i.id));
+            }
+            await loadData();
+        } catch (e) {
+            console.error("Disband failed", e);
+            setAlertDialog({ isOpen: true, message: "Помилка розформування" });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const generatePalletZPL = async (batch: Batch): Promise<string> => {
         const toHex = (str: string) => {
             if (!str) return "";
             return Array.from(new TextEncoder().encode(str))
@@ -140,45 +174,112 @@ export default function NewUserInterface() {
                 .join("");
         };
         const dateStr = batch.date.includes('T') ? batch.date.split('T')[0] : batch.date;
-        const itemsListZpl = batch.items.map((item, idx) => {
-            const col = idx < 10 ? 0 : 1;
-            const row = idx % 10;
-            const x = 50 + (col * 380);
-            const y = 280 + (row * 35);
-            return `^FO${x},${y}^A0N,28,28^FH^FD${idx + 1}. #${item.serialNumber} - ${item.weight.toFixed(1)} kg^FS`;
-        }).join('\n');
+
+        // Logo processing
+        let logoZpl = '';
+        try {
+            logoZpl = await imageToZplGrf('/logo.bmp', 100, 100);
+            logoZpl = `^FO680,15${logoZpl}`; // Place at 680,15
+        } catch (e) {
+            console.error('Logo process error', e);
+        }
+
+        // Bales processing
+        // Layout: Slots 1-5 (Col 1), Slots 6-10 (Col 2), Slot 11 (Col 1), Slot 12 (Col 2)
+        const itemsZplPromises = batch.items.slice(0, 12).map(async (item, idx) => {
+            let x = 30; // Default Col 1
+            let row = 0;
+
+            // Determine position based on index (1-based logic from LabelDesigner)
+            // 0-4 -> Col 1, Rows 0-4
+            // 5-9 -> Col 2, Rows 0-4
+            // 10 -> Col 1, Row 5
+            // 11 -> Col 2, Row 5
+
+            if (idx < 5) {
+                x = 30;
+                row = idx;
+            } else if (idx < 10) {
+                x = 410;
+                row = idx - 5;
+            } else if (idx === 10) {
+                x = 30;
+                row = 5;
+            } else { // idx === 11
+                x = 410;
+                row = 5;
+            }
+
+            const yText = 210 + (row * 60);
+            const yBarcode = yText + 20;
+
+            return `^FO${x},${yText}^A0N,16,16^FH^FD${idx + 1}. #${item.serialNumber} - ${item.weight.toFixed(1)}kg^FS\n^FO${x},${yBarcode}^BY2^BCN,25,Y,N,N^FD${item.serialNumber}^FS`;
+        });
+
+        const itemsZpl = (await Promise.all(itemsZplPromises)).join('\n');
 
         return `^XA
 ^PW800
 ^LL800
 ^CI28
-^FO50,40^A0N,40,40^FB700,1,0,C^FDMARIJANY HEMP^FS
-^FO50,90^GB700,3,3^FS
-^FO50,110^A0N,30,30^FDID:^FS
-^FO100,110^A0N,50,50^FH^FD#${batch.id}^FS
-^FO450,110^A0N,30,30^FD${dateStr}^FS
-^FO50,180^A0N,28,28^FH^FD${toHex(batch.sort)}^FS
-^FO50,220^GB700,2,2^FS
-${itemsListZpl}
-^FO50,630^GB700,2,2^FS
-^FO50,660^A0N,35,35^FH^FD${batch.items.length} шт / ${batch.totalWeight.toFixed(1)} кг^FS
-^FO200,720^BY2^BCN,50,Y,N,N^FD${batch.id}^FS
+
+${logoZpl}
+
+^FO30,20^A0N,32,32^FB500,1,0,L^FDMARIJANY HEMP^FS
+^FO30,55^A0N,18,18^FDДата:^FS
+^FO100,55^A0N,22,22^FD${dateStr}^FS
+^FO30,85^A0N,28,28^FH^FD${toHex(batch.sort || 'Не вказано')}^FS
+^FO30,115^A0N,18,18^FDHEMP FIBER^FS
+
+^FO500,20^A0N,24,24^FDPALLET^FS
+^FO500,50^A0N,16,16^FDSKU:^FS
+^FO560,50^A0N,20,20^FH^FD${toHex(batch.sort || '')}^FS
+
+^FO20,145^GB760,2,2^FS
+
+^FO30,155^A0N,20,20^FDID Палети:^FS
+^FO180,150^A0N,36,36^FH^FD#${batch.id}^FS
+^FO500,155^A0N,18,18^FDSort:^FS
+^FO600,150^A0N,28,28^FH^FD${toHex(batch.sort)}^FS
+
+^FO20,195^GB760,2,2^FS
+
+${itemsZpl}
+
+^FO20,580^GB760,2,2^FS
+^FO30,595^A0N,22,22^FDКількість:^FS
+^FO180,590^A0N,32,32^FD${batch.items.length}^FS
+^FO300,595^A0N,22,22^FDшт^FS
+^FO420,595^A0N,22,22^FDВага:^FS
+^FO520,585^A0N,40,40^FD${batch.totalWeight.toFixed(1)}^FS
+^FO700,595^A0N,22,22^FDkg^FS
+
+^FO150,640^BY2^BCN,60,Y,N,N^FD${batch.id}^FS
+
+^FO20,720^GB760,2,2^FS
+^FO30,735^A0N,14,14^FD12101, Ukraine, Zhytomyr region, Zhytomyr district,^FS
+^FO30,755^A0N,14,14^FDKhoroshivska territorial community, Buildings complex No. 18^FS
+
+^PQ1
 ^XZ`;
     };
 
     return (
-        <div className="flex h-screen bg-slate-100 overflow-hidden">
-            {/* Sidebar */}
-            <aside className="w-64 bg-slate-900 text-white flex flex-col shrink-0">
+        <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--bg-primary)' }}>
+            {/* Sidebar - Corporate Green */}
+            <aside className="w-64 text-white flex flex-col shrink-0" style={{ backgroundColor: 'var(--header-bg)' }}>
                 {/* Logo */}
-                <div className="p-5 border-b border-slate-700">
+                <div className="p-5 border-b border-white/20">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center font-bold text-lg">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg" style={{ backgroundColor: 'var(--accent-secondary)', color: '#1a1a1a' }}>
                             H
                         </div>
                         <div>
                             <div className="font-bold text-lg">HeMP</div>
-                            <div className="text-[10px] text-slate-400 uppercase tracking-wider">Облік</div>
+                            <div className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.6)' }}>Облік</div>
+                        </div>
+                        <div className="ml-auto">
+                            <ThemeToggle />
                         </div>
                     </div>
                 </div>
@@ -187,20 +288,22 @@ ${itemsListZpl}
                 <nav className="flex-1 p-3 space-y-1">
                     <button
                         onClick={() => setActiveView('stock')}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-left ${activeView === 'stock' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-left ${activeView === 'stock' ? '' : 'hover:bg-white/10'}`}
+                        style={activeView === 'stock' ? { backgroundColor: 'var(--accent-secondary)', color: '#1a1a1a' } : {}}
                     >
                         <span className="text-xl">📦</span>
                         <span className="font-medium">Склад</span>
-                        <span className="ml-auto bg-slate-700 text-xs px-2 py-0.5 rounded-full">{stats.count}</span>
+                        <span className="ml-auto text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>{stats.count}</span>
                     </button>
 
                     <button
                         onClick={() => setActiveView('pallets')}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-left ${activeView === 'pallets' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-left ${activeView === 'pallets' ? '' : 'hover:bg-white/10'}`}
+                        style={activeView === 'pallets' ? { backgroundColor: 'var(--accent-secondary)', color: '#1a1a1a' } : {}}
                     >
                         <span className="text-xl">🚛</span>
                         <span className="font-medium">Палети</span>
-                        <span className="ml-auto bg-slate-700 text-xs px-2 py-0.5 rounded-full">{pallets.length}</span>
+                        <span className="ml-auto text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>{pallets.length}</span>
                     </button>
 
                     <div className="border-t border-slate-700 my-4" />
@@ -408,13 +511,22 @@ ${itemsListZpl}
                                                     {pallet.sort}
                                                 </span>
                                             </div>
-                                            <button
-                                                onClick={() => printPalletLabel(pallet)}
-                                                className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all"
-                                            >
-                                                <span>🖨️</span>
-                                                <span>Друкувати етикетку</span>
-                                            </button>
+                                            <div className="flex flex-col gap-2">
+                                                <button
+                                                    onClick={() => printPalletLabel(pallet)}
+                                                    className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all"
+                                                >
+                                                    <span>🖨️</span>
+                                                    <span>Друкувати етикетку</span>
+                                                </button>
+                                                <button
+                                                    onClick={() => requestDisbandPallet(pallet.id)}
+                                                    className="w-full bg-red-100 hover:bg-red-200 text-red-700 py-2 rounded-lg font-bold flex items-center justify-center gap-2 transition-all text-sm"
+                                                >
+                                                    <span>🔓</span>
+                                                    <span>Розформувати</span>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 ))
@@ -442,7 +554,7 @@ ${itemsListZpl}
             )}
 
             {showReports && (
-                <PalletReport onClose={() => setShowReports(false)} />
+                <AccountantReport onClose={() => setShowReports(false)} />
             )}
 
             {/* Write-off Modal */}
@@ -472,6 +584,30 @@ ${itemsListZpl}
                     </div>
                 </div>
             )}
+
+            {/* Disband Pallet Confirmation */}
+            <ConfirmDialog
+                isOpen={disbandConfirm.isOpen}
+                title="Розформувати палету?"
+                message={`Ви впевнені, що хочете розформувати палету №${disbandConfirm.palletId}? Всі бейли повернуться на склад.`}
+                confirmText="Розформувати"
+                cancelText="Скасувати"
+                variant="danger"
+                onCancel={() => setDisbandConfirm({ isOpen: false, palletId: null })}
+                onConfirm={handleDisbandPallet}
+            />
+
+            {/* Alert Dialog */}
+            <ConfirmDialog
+                isOpen={alertDialog.isOpen}
+                title="Інформація"
+                message={alertDialog.message}
+                confirmText="OK"
+                cancelText=""
+                variant="info"
+                onCancel={() => setAlertDialog({ isOpen: false, message: '' })}
+                onConfirm={() => setAlertDialog({ isOpen: false, message: '' })}
+            />
         </div>
     );
 }

@@ -5,6 +5,8 @@ import { ProductionItem } from '../../types/production';
 import { utils, write } from 'xlsx';
 import NotificationBanner from '../ui/NotificationBanner';
 import { NotificationService, NOTIFICATION_THRESHOLD } from '../../services/notificationService';
+import ConfirmDialog from '../ConfirmDialog';
+import ThemeToggle from '../ThemeToggle';
 
 export default function LabInterface() {
     const { logout, currentUser } = useAuth();
@@ -32,6 +34,9 @@ export default function LabInterface() {
     // Notification state
     const [pendingCount, setPendingCount] = useState(0);
     const [showNotification, setShowNotification] = useState(true);
+
+    // Revert confirmation dialog
+    const [revertConfirm, setRevertConfirm] = useState<{ isOpen: boolean; item: ProductionItem | null }>({ isOpen: false, item: null });
 
     // Mock Sorts -> Now Dynamic
     // const sorts = ['1 Сорт', '2 Сорт', '3 Сорт', 'Нестандарт', 'Сміття'];
@@ -84,26 +89,123 @@ export default function LabInterface() {
         });
     }, []);
 
+    // Report State
+    const [reportItems, setReportItems] = useState<ProductionItem[]>([]);
+    const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10)); // YYYY-MM-DD
+    const [endDate, setEndDate] = useState(() => new Date().toISOString().slice(0, 10));
+
+    const loadReportData = async () => {
+        try {
+            // Fetch ALL items to filter locally
+            const allItems = await ProductionService.getAllItems();
+
+            // Filter by Date Range AND Status
+            const start = new Date(startDate);
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+
+            const filtered = allItems.filter(item => {
+                // Determine the relevant date for the report
+                // If item is graded, we ideally want the Grading Date.
+                // If gradedAt/updatedAt matches the filter range, include it.
+                // Fallback to Creation Date (item.date) if no grading timestamp or if finding by production date.
+
+                let relevantDateStr = item.date; // Default DD.MM.YYYY
+
+                // If we have a timestamp for grading (updatedAt or gradedAt) and status is processed
+                if ((item.status === 'graded' || item.status === 'palletized') && (item.updatedAt || item.gradedAt)) {
+                    const ts = item.updatedAt || item.gradedAt || '';
+                    if (ts) {
+                        const dateObj = new Date(ts);
+                        relevantDateStr = dateObj.toLocaleDateString('uk-UA'); // DD.MM.YYYY
+                    }
+                }
+
+                const [d, m, y] = relevantDateStr.split('.').map(Number);
+                const itemDate = new Date(y, m - 1, d); // Construct Date object
+
+                const isDateInRange = itemDate >= start && itemDate <= end;
+                // Show items if they are graded OR processed (not created)
+                // Filter out 'created' items unless they have a sort (edge case)
+                const isProcessed = item.status !== 'created';
+                return isDateInRange && isProcessed;
+            });
+
+            setReportItems(filtered.sort((a, b) => b.serialNumber - a.serialNumber));
+        } catch (e) {
+            console.error("Failed to load report data", e);
+        }
+    };
+
+    // Effect to reload report data when dates change
+    useEffect(() => {
+        if (showReport) {
+            loadReportData();
+        }
+    }, [startDate, endDate, showReport]);
+
     // Report handlers
     const handleOpenReport = () => {
-        loadGradedItems();
+        // loadReportData will be triggered by useEffect when showReport becomes true
         setShowReport(true);
     };
 
     const handleDownloadXLSX = () => {
-        const data = gradedItems.map(item => ({
-            '№': item.serialNumber,
-            'Продукт': item.productName,
-            'Сорт': item.sort || '',
-            'Вага': item.weight,
-            'Дата': item.date,
-            'Штрих-код': item.barcode
+        // Prepare Data for Export (Matching Admin Interface order)
+        // Date, UID, No, Product, Weight, Sort
+        const itemsToExport = reportItems.length > 0 ? reportItems : gradedItems;
+
+        // Sort by Product Name first, then Serial Number
+        const sortedItems = [...itemsToExport].sort((a, b) => {
+            if (a.productName < b.productName) return -1;
+            if (a.productName > b.productName) return 1;
+            return b.serialNumber - a.serialNumber;
+        });
+
+        const detailsData = sortedItems.map(item => ({
+            "Дата": item.date,
+            "UID": item.barcode,
+            "№": item.serialNumber,
+            "Продукт": item.productName,
+            "Вага (кг)": Number(item.weight),
+            "Сорт": item.sort || '-'
         }));
-        const ws = utils.json_to_sheet(data);
+
+        // Summary Data
+        const sortCounts: Record<string, { count: number; weight: number }> = {};
+        sortedItems.forEach(item => {
+            const key = item.productName || 'Unknown';
+            if (!sortCounts[key]) sortCounts[key] = { count: 0, weight: 0 };
+            sortCounts[key].count++;
+            sortCounts[key].weight += item.weight;
+        });
+
+        const summaryData = Object.entries(sortCounts).map(([name, stats]) => ({
+            "Продукт": name,
+            "Кількість (шт)": stats.count,
+            "Вага (кг)": parseFloat(stats.weight.toFixed(3))
+        }));
+
+        // Total Row
+        summaryData.push({
+            "Продукт": "ВСЬОГО",
+            "Кількість (шт)": gradedItems.length,
+            "Вага (кг)": parseFloat(gradedItems.reduce((s, i) => s + i.weight, 0).toFixed(3))
+        });
+
         const wb = utils.book_new();
-        utils.book_append_sheet(wb, ws, 'Звіт');
+
+        const wsSummary = utils.json_to_sheet(summaryData);
+        wsSummary['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 15 }];
+        utils.book_append_sheet(wb, wsSummary, 'Зведення');
+
+        const wsDetails = utils.json_to_sheet(detailsData);
+        wsDetails['!cols'] = [{ wch: 12 }, { wch: 25 }, { wch: 10 }, { wch: 30 }, { wch: 12 }, { wch: 10 }];
+        utils.book_append_sheet(wb, wsDetails, 'Деталі');
+
         const buf = write(wb, { type: 'array', bookType: 'xlsx' });
-        const blob = new Blob([buf], { type: 'application/octet-stream' });
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -113,21 +215,22 @@ export default function LabInterface() {
     };
 
     const generateReportSummary = () => {
+        const items = reportItems.length > 0 ? reportItems : gradedItems;
         const sortCounts: Record<string, { count: number; weight: number }> = {};
-        gradedItems.forEach(item => {
+        items.forEach(item => {
             const sort = item.sort || 'Без сорту';
             if (!sortCounts[sort]) sortCounts[sort] = { count: 0, weight: 0 };
             sortCounts[sort].count++;
             sortCounts[sort].weight += item.weight;
         });
 
-        let summary = `Звіт лабораторії за ${new Date().toLocaleDateString('uk-UA')}\n\n`;
-        summary += `Всього перевірено: ${gradedItems.length} бейлів\n\n`;
+        let summary = `Звіт лабораторії за ${startDate} - ${endDate}\n\n`;
+        summary += `Всього перевірено: ${items.length} бейлів\n\n`;
         summary += `За сортами:\n`;
         Object.entries(sortCounts).forEach(([sort, data]) => {
             summary += `  ${sort}: ${data.count} шт. (${data.weight.toFixed(1)} кг)\n`;
         });
-        summary += `\nЗагальна вага: ${gradedItems.reduce((sum, i) => sum + i.weight, 0).toFixed(1)} кг`;
+        summary += `\nЗагальна вага: ${items.reduce((sum, i) => sum + i.weight, 0).toFixed(1)} кг`;
         return summary;
     };
 
@@ -146,11 +249,17 @@ export default function LabInterface() {
         setEmailSending(false);
     };
 
-    const handleRevertGrade = async (item: ProductionItem) => {
-        if (!window.confirm(`Повернути бейл №${item.serialNumber} на перевірку?`)) return;
+    const requestRevertGrade = (item: ProductionItem) => {
+        setRevertConfirm({ isOpen: true, item });
+    };
+
+    const handleRevertGrade = async () => {
+        const item = revertConfirm.item;
+        setRevertConfirm({ isOpen: false, item: null });
+        if (!item) return;
         try {
             await ProductionService.revertGrade(item.id);
-            loadGradedItems(); // Refresh report list
+            loadReportData(); // Refresh report list
             loadData(); // Refresh main list
         } catch (e) {
             console.error("Failed to revert grade", e);
@@ -230,32 +339,37 @@ export default function LabInterface() {
     };
 
     return (
-        <div className="flex flex-col h-screen bg-slate-100 font-sans">
-            {/* Header */}
-            <div className="bg-purple-900 text-white p-3 md:p-4 flex justify-between items-center shadow-lg shrink-0 z-10">
+        <div className="flex flex-col h-screen font-sans" style={{ backgroundColor: 'var(--bg-primary)' }}>
+            {/* Header - Corporate Green */}
+            <div className="text-white p-3 md:p-4 flex justify-between items-center shadow-lg shrink-0 z-10" style={{ backgroundColor: 'var(--header-bg)' }}>
                 <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center font-bold text-white shadow-inner">L</div>
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white shadow-inner" style={{ backgroundColor: 'var(--accent-secondary)' }}>L</div>
                     <div>
                         <div className="font-bold text-lg leading-tight">ЛАБОРАТОРІЯ</div>
-                        <div className="text-[10px] text-purple-200 tracking-wider">HeMP QC</div>
+                        <div className="text-[10px] tracking-wider" style={{ color: 'rgba(255,255,255,0.7)' }}>HeMP QC</div>
                     </div>
                 </div>
-                <div className="flex items-center gap-4">
-                    <span className="opacity-80 text-sm hidden md:inline">{currentUser?.name}</span>
-                    <button
-                        onClick={handleOpenReport}
-                        className="px-4 py-2 rounded text-sm font-bold bg-purple-600 hover:bg-purple-500 border border-purple-400 transition-all"
-                    >
-                        📊 Звіти
-                    </button>
-                    <button
-                        onClick={handleLogoutClick}
-                        className={`px-4 py-2 rounded text-sm transition-all font-bold border ${logoutConfirm
-                            ? 'bg-red-500 text-white border-red-400 animate-pulse'
-                            : 'bg-purple-800 hover:bg-purple-700 border-purple-600'}`}
-                    >
-                        {logoutConfirm ? 'Підтвердити?' : 'Вийти'}
-                    </button>
+                <div className="flex items-center gap-3">
+                    <ThemeToggle />
+                    <div className="flex items-center gap-4">
+                        <span className="opacity-80 text-sm hidden md:inline">{currentUser?.name}</span>
+                        <button
+                            onClick={handleOpenReport}
+                            className="px-4 py-2 rounded text-sm font-bold transition-all"
+                            style={{ backgroundColor: 'var(--accent-secondary)', color: '#1a1a1a' }}
+                        >
+                            📊 Звіти
+                        </button>
+                        <button
+                            onClick={handleLogoutClick}
+                            className={`px-4 py-2 rounded text-sm transition-all font-bold border ${logoutConfirm
+                                ? 'bg-red-500 text-white border-red-400 animate-pulse'
+                                : ''}`}
+                            style={!logoutConfirm ? { backgroundColor: 'rgba(255,255,255,0.2)', borderColor: 'rgba(255,255,255,0.3)' } : {}}
+                        >
+                            {logoutConfirm ? 'Підтвердити?' : 'Вийти'}
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -503,100 +617,250 @@ export default function LabInterface() {
             {/* Report Modal */}
             {showReport && (
                 <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden">
                         {/* Header */}
                         <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-6 flex justify-between items-center shrink-0">
                             <div>
                                 <h2 className="text-2xl font-bold">Звіт Лабораторії</h2>
-                                <p className="text-sm opacity-80">Перевірені бейли за сортами</p>
+                                <p className="text-sm opacity-80">Генерація звіту за період</p>
                             </div>
                             <button onClick={() => setShowReport(false)} className="text-white/70 hover:text-white text-3xl">×</button>
                         </div>
 
-                        {/* Summary */}
-                        <div className="p-4 bg-purple-50 border-b border-purple-100 grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="text-center">
-                                <div className="text-3xl font-bold text-purple-700">{gradedItems.length}</div>
-                                <div className="text-xs text-purple-500">Всього бейлів</div>
+                        {/* Controls (Date Range) */}
+                        <div className="p-4 bg-white border-b border-slate-200 flex flex-wrap gap-4 items-center">
+                            <div className="flex items-center gap-2">
+                                <label className="text-sm font-bold text-slate-600">Від:</label>
+                                <input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="border border-slate-300 rounded px-2 py-1 text-sm font-mono"
+                                />
                             </div>
-                            <div className="text-center">
-                                <div className="text-3xl font-bold text-green-600">{gradedItems.reduce((sum, i) => sum + i.weight, 0).toFixed(1)}</div>
-                                <div className="text-xs text-green-500">Вага (кг)</div>
+                            <div className="flex items-center gap-2">
+                                <label className="text-sm font-bold text-slate-600">До:</label>
+                                <input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    className="border border-slate-300 rounded px-2 py-1 text-sm font-mono"
+                                />
                             </div>
-                            <div className="text-center">
-                                <div className="text-3xl font-bold text-blue-600">{[...new Set(gradedItems.map(i => i.sort))].length}</div>
-                                <div className="text-xs text-blue-500">Сортів</div>
+                            <button
+                                onClick={loadReportData}
+                                className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-bold"
+                            >
+                                🔄 Оновити
+                            </button>
+                        </div>
+
+                        {/* Summary Stats (Dynamic based on reportItems) */}
+                        <div className="p-4 bg-purple-50 border-b border-purple-100">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                                <div className="text-center bg-white p-3 rounded-xl border border-purple-100">
+                                    <div className="text-3xl font-bold text-purple-700">{reportItems.length}</div>
+                                    <div className="text-xs text-purple-500 uppercase font-bold">Всього бейлів</div>
+                                </div>
+                                <div className="text-center bg-white p-3 rounded-xl border border-purple-100">
+                                    <div className="text-3xl font-bold text-green-600">{reportItems.reduce((sum, i) => sum + i.weight, 0).toFixed(1)}</div>
+                                    <div className="text-xs text-green-500 uppercase font-bold">Вага (кг)</div>
+                                </div>
+                                <div className="text-center bg-white p-3 rounded-xl border border-purple-100">
+                                    <div className="text-3xl font-bold text-blue-600">{[...new Set(reportItems.map(i => i.sort))].length}</div>
+                                    <div className="text-xs text-blue-500 uppercase font-bold">Сортів</div>
+                                </div>
+                                <div className="text-center bg-white p-3 rounded-xl border border-purple-100">
+                                    <div className="text-3xl font-bold text-orange-600">{[...new Set(reportItems.map(i => i.productName))].length}</div>
+                                    <div className="text-xs text-orange-500 uppercase font-bold">Продуктів</div>
+                                </div>
                             </div>
-                            <div className="text-center">
-                                <div className="text-3xl font-bold text-orange-600">{[...new Set(gradedItems.map(i => i.productName))].length}</div>
-                                <div className="text-xs text-orange-500">Продуктів</div>
+                            {/* Detailed Aggregation by Product/Sort */}
+                            <div className="flex gap-2 overflow-x-auto pb-2">
+                                {Object.entries(reportItems.reduce((acc, item) => {
+                                    const key = item.sort || 'No Sort';
+                                    if (!acc[key]) acc[key] = 0;
+                                    acc[key]++;
+                                    return acc;
+                                }, {} as Record<string, number>)).map(([sort, count]) => (
+                                    <span key={sort} className="px-3 py-1 bg-white border border-purple-200 rounded-lg text-xs font-bold text-purple-700 whitespace-nowrap">
+                                        {sort}: {count}
+                                    </span>
+                                ))}
                             </div>
                         </div>
 
-                        {/* Email */}
-                        <div className="p-4 bg-white border-b border-slate-200 flex gap-3 items-center">
-                            <input
-                                type="email"
-                                value={reportEmail}
-                                onChange={(e) => setReportEmail(e.target.value)}
-                                placeholder="Email для звіту..."
-                                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg"
-                            />
-                            <button
-                                onClick={handleSendEmail}
-                                disabled={!reportEmail || emailSending}
-                                className="px-4 py-2 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 disabled:bg-slate-300"
-                            >
-                                📧 Надіслати
-                            </button>
-                            <button
-                                onClick={handleDownloadXLSX}
-                                className="px-4 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700"
-                            >
-                                📥 XLSX
-                            </button>
+                        {/* Actions Toolbar */}
+                        <div className="p-4 bg-white border-b border-slate-200 flex flex-wrap gap-3 items-center justify-between">
+                            <div className="flex gap-2 w-full md:w-auto">
+                                <button
+                                    onClick={() => {
+                                        const printWindow = window.open('', '_blank');
+                                        if (!printWindow) return;
+
+                                        // Group items by Product Name
+                                        const groupedItems: Record<string, ProductionItem[]> = {};
+                                        reportItems.forEach(item => {
+                                            const key = item.productName || 'Інше';
+                                            if (!groupedItems[key]) groupedItems[key] = [];
+                                            groupedItems[key].push(item);
+                                        });
+
+                                        // Generate HTML for each group
+                                        let tablesHtml = '';
+                                        const totalWeight = reportItems.reduce((sum, i) => sum + i.weight, 0).toFixed(2);
+
+                                        Object.entries(groupedItems).forEach(([productName, items]) => {
+                                            const groupWeight = items.reduce((sum, i) => sum + i.weight, 0).toFixed(2);
+                                            const rows = items.map(item => `
+                                                <tr>
+                                                    <td>${item.date}</td>
+                                                    <td style="font-family: monospace;">${item.barcode}</td>
+                                                    <td>${item.serialNumber}</td>
+                                                    <td style="text-align: right;">${item.weight} кг</td>
+                                                    <td>${item.sort || '-'}</td>
+                                                </tr>
+                                            `).join('');
+
+                                            tablesHtml += `
+                                                <div class="product-section">
+                                                    <h2>${productName}</h2>
+                                                    <table>
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Дата</th>
+                                                                <th>UID</th>
+                                                                <th>№</th>
+                                                                <th>Вага (кг)</th>
+                                                                <th>Сорт</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>${rows}</tbody>
+                                                    </table>
+                                                    <div class="subtotal">
+                                                        Всього по ${productName}: ${items.length} шт | Вага: ${groupWeight} кг
+                                                    </div>
+                                                </div>
+                                            `;
+                                        });
+
+                                        // Format date range string
+                                        const dateStr = startDate === endDate ?
+                                            new Date(startDate).toLocaleDateString('uk-UA') :
+                                            `${new Date(startDate).toLocaleDateString('uk-UA')} - ${new Date(endDate).toLocaleDateString('uk-UA')}`;
+
+                                        printWindow.document.write(`
+                                            <html>
+                                            <head>
+                                                <title>Звіт Лабораторії</title>
+                                                <style>
+                                                    body { font-family: Arial, sans-serif; padding: 20px; }
+                                                    h1 { text-align: center; font-size: 24px; margin-bottom: 5px; text-transform: uppercase; }
+                                                    h2 { font-size: 18px; margin-top: 30px; margin-bottom: 10px; border-bottom: 2px solid #ddd; padding-bottom: 5px; color: #444; }
+                                                    .meta { text-align: center; font-size: 14px; margin-bottom: 20px; color: #555; }
+                                                    table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 10px; }
+                                                    th, td { border: 1px solid #000; padding: 6px 10px; text-align: left; }
+                                                    th { background-color: #f2f2f2; font-weight: bold; text-align: center; }
+                                                    .subtotal { text-align: right; font-weight: bold; font-size: 12px; margin-bottom: 20px; }
+                                                    .grand-total { margin-top: 40px; text-align: right; font-size: 16px; font-weight: bold; border-top: 2px solid #000; padding-top: 10px; }
+                                                    @media print { 
+                                                        @page { margin: 10mm; } 
+                                                        .product-section { break-inside: avoid; }
+                                                    }
+                                                </style>
+                                            </head>
+                                            <body>
+                                                <h1>Звіт Лабораторії</h1>
+                                                <div class="meta">за ${dateStr}</div>
+                                                
+                                                ${tablesHtml}
+                                                
+                                                <div class="grand-total">
+                                                    ЗАГАЛОМ: ${reportItems.length} шт | ВАГА: ${totalWeight} кг
+                                                </div>
+                                            </body>
+                                            </html>
+                                         `);
+                                        printWindow.document.close();
+                                        printWindow.focus();
+                                        setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
+                                    }}
+                                    className="flex-1 md:flex-none px-4 py-2 bg-slate-800 text-white rounded-lg font-bold hover:bg-slate-900 shadow-lg flex items-center justify-center gap-2"
+                                >
+                                    🖨️ Друк (PDF)
+                                </button>
+                                <button
+                                    onClick={handleDownloadXLSX}
+                                    className="flex-1 md:flex-none px-4 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 shadow-lg flex items-center justify-center gap-2"
+                                >
+                                    📊 Excel
+                                </button>
+                            </div>
+
+                            <div className="flex gap-2 w-full md:w-auto">
+                                <input
+                                    type="email"
+                                    value={reportEmail}
+                                    onChange={(e) => setReportEmail(e.target.value)}
+                                    placeholder="Email..."
+                                    className="flex-1 px-4 py-2 border border-slate-300 rounded-lg"
+                                />
+                                <button
+                                    onClick={handleSendEmail}
+                                    disabled={!reportEmail || emailSending}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 disabled:bg-slate-300 shadow-lg"
+                                >
+                                    📧 Send
+                                </button>
+                            </div>
                         </div>
 
                         {/* List */}
                         <div className="flex-1 overflow-y-auto p-4">
-                            {gradedItems.length === 0 ? (
+                            {reportItems.length === 0 ? (
                                 <div className="text-center py-16 text-slate-400">
                                     <div className="text-6xl mb-4">📋</div>
-                                    <p>Немає перевірених бейлів</p>
+                                    <p>Немає бейлів за обраний період</p>
                                 </div>
                             ) : (
-                                <table className="w-full text-sm">
-                                    <thead className="bg-slate-100 sticky top-0">
+                                <table className="w-full text-sm border-separate border-spacing-0">
+                                    <thead className="bg-slate-100 sticky top-0 z-10">
                                         <tr>
-                                            <th className="p-2 text-left">№</th>
-                                            <th className="p-2 text-left">Продукт</th>
-                                            <th className="p-2 text-left">Сорт</th>
-                                            <th className="p-2 text-right">Вага</th>
-                                            <th className="p-2 text-left">Дата</th>
-                                            <th className="p-2 text-left">Штрих-код</th>
-                                            <th className="p-2 text-right">Дії</th>
+                                            <th className="p-3 text-left font-bold border-b">№</th>
+                                            <th className="p-3 text-left font-bold border-b">Продукт</th>
+                                            <th className="p-3 text-left font-bold border-b">Сорт</th>
+                                            <th className="p-3 text-right font-bold border-b">Вага</th>
+                                            <th className="p-3 text-left font-bold border-b">Дата</th>
+                                            <th className="p-3 text-left font-bold border-b">UID</th>
+                                            <th className="p-3 text-right font-bold border-b">Дії</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
-                                        {gradedItems.map(item => (
-                                            <tr key={item.id} className="hover:bg-slate-50">
-                                                <td className="p-2 font-mono font-bold">{item.serialNumber}</td>
-                                                <td className="p-2">{item.productName}</td>
-                                                <td className="p-2">
-                                                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-bold">
+                                        {reportItems.map(item => (
+                                            <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                                                <td className="p-3 font-mono font-bold text-slate-700">{item.serialNumber}</td>
+                                                <td className="p-3 font-medium">{item.productName}</td>
+                                                <td className="p-3">
+                                                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${item.sort?.includes('1') ? 'bg-green-100 text-green-700' :
+                                                        item.sort?.includes('Брак') ? 'bg-red-100 text-red-700' :
+                                                            'bg-purple-100 text-purple-700'
+                                                        }`}>
                                                         {item.sort}
                                                     </span>
                                                 </td>
-                                                <td className="p-2 text-right font-mono">{item.weight} кг</td>
-                                                <td className="p-2 text-slate-500">{item.date}</td>
-                                                <td className="p-2 font-mono text-xs text-slate-400">{item.barcode}</td>
-                                                <td className="p-2 text-right">
+                                                <td className="p-3 text-right font-mono font-bold">{item.weight}</td>
+                                                <td className="p-3 text-slate-500 text-xs">{item.date}</td>
+                                                <td className="p-3 font-mono text-xs text-slate-400">{item.barcode}</td>
+                                                <td className="p-3 text-right">
+                                                    {/* Only allow revert if not palletized?? For now allow if graded. */}
                                                     <button
-                                                        onClick={() => handleRevertGrade(item)}
-                                                        className="px-3 py-1 bg-slate-200 hover:bg-red-100 text-slate-700 hover:text-red-600 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 ml-auto"
+                                                        onClick={() => requestRevertGrade(item)}
+                                                        disabled={item.status !== 'graded'} // Disable if already palletized
+                                                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1 ml-auto ${item.status !== 'graded' ? 'bg-slate-100 text-slate-300 opacity-50 cursor-not-allowed' : 'bg-white border border-slate-200 hover:bg-red-50 hover:border-red-200 text-slate-600 hover:text-red-600'
+                                                            }`}
                                                         title="Повернути на перевірку"
                                                     >
-                                                        <span>↩️</span> Скасувати
+                                                        ↩️ Скасувати
                                                     </button>
                                                 </td>
                                             </tr>
@@ -608,6 +872,18 @@ export default function LabInterface() {
                     </div>
                 </div>
             )}
+
+            {/* Revert Grade Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={revertConfirm.isOpen}
+                title="Повернути бейл?"
+                message={`Повернути бейл №${revertConfirm.item?.serialNumber} на перевірку? Сорт буде скинуто.`}
+                confirmText="Повернути"
+                cancelText="Скасувати"
+                variant="warning"
+                onCancel={() => setRevertConfirm({ isOpen: false, item: null })}
+                onConfirm={handleRevertGrade}
+            />
         </div>
     );
 }

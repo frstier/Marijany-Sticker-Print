@@ -3,6 +3,7 @@ import { Product, LabelData, LabelSizeConfig } from '../../types';
 import { PRODUCTS, LABEL_SIZES, INITIAL_SERIAL, ZPL_100x100_OFFSET } from '../../constants';
 import { zebraService } from '../../services/zebraService';
 import { DataManager } from '../../services/dataManager';
+import { ProductionService } from '../../services/productionService';
 
 // Components
 import Keypad from '../Keypad';
@@ -25,6 +26,7 @@ import { useDeferredPrint } from '../../hooks/useDeferredPrint';
 
 // Services
 import { shiftService, Shift, ShiftSummary } from '../../services/shiftService';
+import { getEffectiveTemplate } from '../../utils/templateManager';
 
 const LOCAL_STORAGE_COUNTERS_KEY = 'zebra_product_counters_v1';
 
@@ -108,6 +110,33 @@ export default function StandardInterface() {
         } else {
             setSelectedSort("");
         }
+    }, [selectedProduct]);
+
+    // 2.5 Sync Serial from DB on Product Change (for Operator)
+    useEffect(() => {
+        const syncSerialFromDB = async () => {
+            if (!selectedProduct) return;
+            // Only sync if current counter equals INITIAL_SERIAL (meaning it wasn't manually set)
+            // Or always sync to get the latest max? Let's always sync for consistency.
+            try {
+                const maxSerial = await ProductionService.getMaxSerialNumber(selectedProduct.name);
+                if (maxSerial > 0) {
+                    // Set counter to max + 1
+                    setProductCounters(prev => {
+                        const currentVal = prev[selectedProduct.id] ?? INITIAL_SERIAL;
+                        // Only update if DB has higher, don't override manual edits
+                        if (maxSerial >= currentVal) {
+                            console.log(`🔄 Syncing serial for ${selectedProduct.name}: DB max=${maxSerial}, setting to ${maxSerial + 1}`);
+                            return { ...prev, [selectedProduct.id]: maxSerial + 1 };
+                        }
+                        return prev;
+                    });
+                }
+            } catch (e) {
+                console.error("Failed to sync serial from DB", e);
+            }
+        };
+        syncSerialFromDB();
     }, [selectedProduct]);
 
     // 3. Counters Loading/Sync
@@ -323,7 +352,11 @@ export default function StandardInterface() {
 
         // Custom Template Logic:
         // If Product is 'Short Fiber' (id: 2) OR 'Hurds Calibrated' (id: 3) AND Size is 100x100 -> Use Offset Template
-        let zplTemplate = selectedLabelSize.template;
+        // Custom Template Logic:
+        // 1. Check for overrides or dynamic generation first
+        // If Product is 'Short Fiber' (id: 2) OR 'Hurds Calibrated' (id: 3) AND Size is 100x100 -> Use Offset Template
+        let zplTemplate = await getEffectiveTemplate(selectedLabelSize.id, 'operator');
+
         if ((data.product?.id === '2' || data.product?.id === '3') && selectedLabelSize.id === '100x100') {
             zplTemplate = ZPL_100x100_OFFSET;
         }

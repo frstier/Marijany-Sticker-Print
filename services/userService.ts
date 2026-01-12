@@ -78,6 +78,7 @@ export const UserService = {
             { id: 'accountant', name: 'Обліковець' },
             { id: 'report', name: 'Звіт' },
             { id: 'admin', name: 'Адміністратор' },
+            { id: 'receiving', name: 'Приймання (Склад)' },
             { id: 'postgres_user', name: 'Postgres Test (Dev)' },
         ];
     }

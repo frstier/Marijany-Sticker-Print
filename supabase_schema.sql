@@ -21,7 +21,7 @@ DROP TABLE IF EXISTS products CASCADE;
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('accountant', 'lab', 'agro', 'admin', 'operator', 'report', 'postgres_user')),
+    role TEXT NOT NULL CHECK (role IN ('accountant', 'lab', 'agro', 'admin', 'operator', 'report', 'postgres_user', 'receiving')),
     pin TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -60,9 +60,14 @@ CREATE TABLE production_items (
     
     -- Lab Data
     sort TEXT,
+    lab_notes TEXT, -- Added for lab comments
     graded_at TIMESTAMPTZ,
     lab_user_id UUID REFERENCES users(id),
     operator_id UUID REFERENCES users(id),
+    
+    -- Import / Batch Print Data
+    import_batch_id TEXT, -- ID of the import session (e.g. "import_20240108_1030")
+    printed_at TIMESTAMPTZ, -- When sticker was successfully printed
     
     -- Accountant Data (Pallet)
     batch_id TEXT, -- Links to batches.id

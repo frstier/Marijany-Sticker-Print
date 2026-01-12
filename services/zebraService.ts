@@ -317,6 +317,16 @@ class ZebraService {
       return this.printViaWebBluetooth(device, zpl);
     }
 
+    // Explicitly fallback/fail for Manual/IP printers on Web that are NOT from BrowserPrint
+    if (device.provider === 'Manual' || (device.connection === 'net' && !device.uid.includes(','))) { // Simple heuristic
+      // Actually, let's just use provider 'Manual' which we set in usePrinter for IP entry
+      if (device.provider === 'Manual') {
+        console.error("Manual IP printing is NOT supported on Web/Desktop. Please install Zebra Browser Print and add the printer there.");
+        alert("Помилка: Ручне додавання IP працює лише в Android додатку. На ПК вставновить Zebra Browser Print та додайте принтер туди.");
+        return false;
+      }
+    }
+
     // VIRTUAL PRINTER (Test Mode)
     if (device.connection === 'virtual') {
       console.log(`[VIRTUAL PRINTER] Printing: ${zpl.substring(0, 50)}...`);

@@ -144,6 +144,7 @@ export default function PalletBuilder({ onClose, onComplete }: PalletBuilderProp
         };
 
         const dateStr = batch.date.includes('T') ? batch.date.split('T')[0] : batch.date;
+        const displayId = batch.displayId || batch.id;
 
         // Get product info from first item
         const firstItem = batch.items[0];
@@ -181,7 +182,7 @@ export default function PalletBuilder({ onClose, onComplete }: PalletBuilderProp
 ^FO20,140^GB760,2,2^FS
 
 ^FO30,150^A0N,20,20^FH^FD${toHex('ID Палети:')}^FS
-^FO180,145^A0N,36,36^FH^FD#${batch.id}^FS
+^FO180,145^A0N,36,36^FH^FD${toHex(displayId)}^FS
 ^FO500,150^A0N,18,18^FH^FD${toHex('Сорт:')}^FS
 ^FO580,145^A0N,28,28^FH^FD${toHex(batch.sort)}^FS
 
@@ -415,27 +416,32 @@ function AutoPackMode({ availableItems, onFinish, onClose, generateZPL, printer 
         setProcessing(true);
         const pallet = generatedPallets[palletIndex];
 
-        // Create Batch with custom ID from pallet
-        const batch = await PalletService.createBatch(pallet.sort, pallet.id);
+        try {
+            // Create Batch with custom ID from pallet
+            let currentBatch = await PalletService.createBatch(pallet.sort, pallet.id);
 
-        for (const item of pallet.items) {
-            const batchItem: BatchItem = {
-                serialNumber: item.serialNumber,
-                weight: item.weight,
-                productName: item.productName,
-                sort: item.sort || 'Unknown',
-                date: item.date,
-                productionItemId: item.id
-            };
-            await PalletService.addItemToBatch(batch.id, batchItem);
+            for (const item of pallet.items) {
+                const batchItem: BatchItem = {
+                    serialNumber: item.serialNumber,
+                    weight: item.weight,
+                    productName: item.productName,
+                    sort: item.sort || 'Unknown',
+                    date: item.date,
+                    productionItemId: item.id
+                };
+                // Update currentBatch with the returned value
+                currentBatch = await PalletService.addItemToBatch(currentBatch.id, batchItem);
+            }
+            // Pass the fully updated batch to onFinish
+            await onFinish(currentBatch);
+        } catch (e) {
+            console.error("AutoPack Failed", e);
+            alert("Помилка авто-формування: " + (e instanceof Error ? e.message : "Unknown"));
         }
 
-        // Recalculate total (though batch from service should have it update)
-        // With async service, we might need to rely on what service returns or just trust pallet info
-        // batch.totalWeight = pallet.totalWeight; 
-
-        await onFinish(batch);
-        setProcessing(false);
+        finally {
+            setProcessing(false);
+        }
     };
 
     if (generatedPallets.length === 0) {
@@ -572,12 +578,18 @@ function ScanFirstMode({ availableItems, setAvailableItems, onFinish, onClose }:
                 currentBatch.sort = item.sort || 'Auto';
             }
 
-            const updated = await PalletService.addItemToBatch(currentBatch.id, batchItem);
-            setCurrentBatch({ ...updated });
-            setAvailableItems(prev => prev.filter(i => i.id !== item.id));
-            setLastScanned(`✅ #${item.serialNumber} додано`);
-            playSound('success');
-            setTimeout(() => setLastScanned(null), 1500);
+            try {
+                const updated = await PalletService.addItemToBatch(currentBatch.id, batchItem);
+                setCurrentBatch({ ...updated });
+                setAvailableItems(prev => prev.filter(i => i.id !== item.id));
+                setLastScanned(`✅ #${item.serialNumber} додано`);
+                playSound('success');
+                setTimeout(() => setLastScanned(null), 1500);
+            } catch (err) {
+                console.error(err);
+                setError(err instanceof Error ? err.message : "Помилка додавання");
+                playSound('error');
+            }
         }
 
         setScanInput('');
@@ -752,21 +764,26 @@ function QuickAddMode({ availableItems, onFinish, onClose }: QuickAddModeProps) 
     const handleConfirm = async () => {
         if (preview.length !== PALLET_SIZE) return;
 
-        const batch = await PalletService.createBatch(selectedSort || 'Auto');
+        try {
+            let currentBatch = await PalletService.createBatch(selectedSort || 'Auto');
 
-        for (const item of preview) {
-            const batchItem: BatchItem = {
-                serialNumber: item.serialNumber,
-                weight: item.weight,
-                productName: item.productName,
-                sort: item.sort || 'Unknown',
-                date: item.date,
-                productionItemId: item.id
-            };
-            await PalletService.addItemToBatch(batch.id, batchItem);
+            for (const item of preview) {
+                const batchItem: BatchItem = {
+                    serialNumber: item.serialNumber,
+                    weight: item.weight,
+                    productName: item.productName,
+                    sort: item.sort || 'Unknown',
+                    date: item.date,
+                    productionItemId: item.id
+                };
+                currentBatch = await PalletService.addItemToBatch(currentBatch.id, batchItem);
+            }
+
+            await onFinish(currentBatch);
+        } catch (e) {
+            console.error("QuickAdd Failed", e);
+            alert("Помилка при створенні палети: " + (e instanceof Error ? e.message : "Unknown"));
         }
-
-        await onFinish(batch);
     };
 
     if (!confirmed) {
@@ -930,9 +947,18 @@ function ManualMode({ availableItems, setAvailableItems, onFinish, onClose }: Ma
             productionItemId: item.id
         };
 
-        const updated = await PalletService.addItemToBatch(currentBatch.id, batchItem);
-        setCurrentBatch({ ...updated });
-        setAvailableItems(prev => prev.filter(i => i.id !== item.id));
+        try {
+            const updated = await PalletService.addItemToBatch(currentBatch.id, batchItem);
+            if (updated && updated.items) {
+                setCurrentBatch({ ...updated });
+                setAvailableItems(prev => prev.filter(i => i.id !== item.id));
+            } else {
+                setError("Помилка оновлення палети. Спробуйте ще раз.");
+            }
+        } catch (e) {
+            console.error(e);
+            setError(e instanceof Error ? e.message : "Критична помилка додавання");
+        }
     };
 
     const handleRemoveItem = (serial: number) => {

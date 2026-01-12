@@ -6,6 +6,7 @@ import NewUserInterface from './components/interfaces/NewUserInterface';
 import LabInterface from './components/interfaces/LabInterface';
 import AdminInterface from './components/interfaces/AdminInterface';
 import ReportInterface from './components/interfaces/ReportInterface';
+import ReceivingInterface from './components/interfaces/ReceivingInterface';
 
 import { UserService } from './services/userService';
 import { ConfigService } from './services/configService';
@@ -55,6 +56,10 @@ export default function App() {
 
     if (currentUser.role === 'report') {
         return <ReportInterface />;
+    }
+
+    if (currentUser.role === 'receiving') {
+        return <ReceivingInterface />;
     }
 
     // Default to Standard Interface

@@ -3,13 +3,13 @@ import { User } from '../types';
 import { USERS } from '../constants';
 import logoImg from '/logo.png';
 
+import InfoModal from './InfoModal';
+import ThemeToggle from './ThemeToggle';
+
 interface LoginScreenProps {
     onLogin: (user: User) => void;
     users?: User[];
 }
-
-import InfoModal from './InfoModal';
-// abort
 // ... other imports if needed, but LoginScreen uses imports at top. 
 // Easier to replace the whole return or significant chunks.
 
@@ -105,11 +105,20 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users = USERS }) => 
     const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'empty', '0', 'back'];
 
     return (
-        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 relative">
+        <div className="min-h-screen flex items-center justify-center p-4 relative" style={{ backgroundColor: 'var(--bg-primary)' }}>
+            {/* Theme Toggle in top-left */}
+            <div className="absolute top-4 left-4 md:top-8 md:left-8 z-10">
+                <ThemeToggle />
+            </div>
+
             {/* Info Button in Header */}
             <button
                 onClick={() => setIsInfoOpen(true)}
-                className="absolute top-4 right-4 md:top-8 md:right-8 bg-white p-2 md:p-3 rounded-full shadow-lg text-slate-500 hover:text-[#115740] hover:scale-110 transition-all z-10"
+                className="absolute top-4 right-4 md:top-8 md:right-8 p-2 md:p-3 rounded-full shadow-lg transition-all z-10 hover:scale-110"
+                style={{
+                    backgroundColor: 'var(--bg-card)',
+                    color: 'var(--text-secondary)'
+                }}
                 title="Інструкція"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 md:h-8 md:w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -119,13 +128,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, users = USERS }) => 
 
             <InfoModal isOpen={isInfoOpen} onClose={() => setIsInfoOpen(false)} />
 
-            <div className="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden relative z-0">
-                <div className="bg-[#115740] p-4 md:p-6 text-center">
+            <div className="w-full max-w-sm rounded-2xl shadow-xl overflow-hidden relative z-0" style={{ backgroundColor: 'var(--bg-card)' }}>
+                {/* Header with corporate green */}
+                <div className="p-4 md:p-6 text-center" style={{ backgroundColor: 'var(--header-bg)' }}>
                     <div className="w-16 h-16 md:w-20 md:h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-3 md:mb-4 shadow-lg p-3">
                         <img src={logoImg} alt="Logo" className="w-full h-full object-contain" />
                     </div>
-                    <h1 className="text-xl md:text-2xl font-bold text-white">Авторизація</h1>
-                    <p className="text-emerald-100 text-sm mt-1 mb-1">HeMP v1.0</p>
+                    <h1 className="text-xl md:text-2xl font-bold" style={{ color: 'var(--header-text)' }}>Авторизація</h1>
+                    <p className="text-sm mt-1 mb-1" style={{ color: 'rgba(255,255,255,0.8)' }}>HeMP v1.0</p>
                 </div>
 
                 <div className="p-6">

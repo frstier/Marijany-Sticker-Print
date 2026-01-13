@@ -363,6 +363,58 @@ export default function AdminInterface() {
                                     </button>
                                 </div>
                             </section>
+
+                            {/* Office Printer for Reports */}
+                            <section className="pt-6 border-t border-[var(--border-color)]">
+                                <h3 className="font-bold text-[var(--text-secondary)] mb-3 flex items-center gap-2">
+                                    🖨️ Офісний Принтер (для звітів)
+                                </h3>
+                                <p className="text-sm text-[var(--text-muted)] mb-3">
+                                    Назва та IP офісного принтера для друку звітів
+                                </p>
+                                <div className="space-y-2">
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            id="office-printer-name"
+                                            className="border-2 border-[var(--border-color)] bg-[var(--bg-input)] rounded-lg px-3 py-2 text-sm flex-1 focus:border-[var(--text-secondary)] outline-none text-[var(--text-primary)]"
+                                            placeholder="Назва: Kyocera TasKalfa 3252ci"
+                                            defaultValue={localStorage.getItem('office_printer_name') || ''}
+                                        />
+                                        <input
+                                            type="text"
+                                            id="office-printer-ip"
+                                            className="border-2 border-[var(--border-color)] bg-[var(--bg-input)] rounded-lg px-3 py-2 text-sm w-40 font-mono focus:border-[var(--text-secondary)] outline-none text-[var(--text-primary)]"
+                                            placeholder="IP: 10.10.10.50"
+                                            defaultValue={localStorage.getItem('office_printer_ip') || ''}
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                const nameInput = document.getElementById('office-printer-name') as HTMLInputElement;
+                                                const ipInput = document.getElementById('office-printer-ip') as HTMLInputElement;
+                                                const name = nameInput.value.trim();
+                                                const ip = ipInput.value.trim();
+
+                                                if (name || ip) {
+                                                    localStorage.setItem('office_printer_name', name);
+                                                    localStorage.setItem('office_printer_ip', ip);
+                                                    alert(`Офісний принтер збережено:\n${name}${ip ? ` (${ip})` : ''}`);
+                                                } else {
+                                                    localStorage.removeItem('office_printer_name');
+                                                    localStorage.removeItem('office_printer_ip');
+                                                    alert('Налаштування офісного принтера видалено');
+                                                }
+                                            }}
+                                            className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 font-bold transition-colors"
+                                        >
+                                            Зберегти
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="mt-2 text-xs text-[var(--text-muted)]">
+                                    💡 Користувачі побачать підказку перед друком: "Виберіть принтер: Kyocera TasKalfa (10.10.10.50)"
+                                </div>
+                            </section>
                         </div>
                     )}
 
@@ -672,7 +724,38 @@ export default function AdminInterface() {
 
                                 {/* Email Settings */}
                                 <div className="pt-8 border-t border-[var(--border-color)]">
-                                    <h3 className="font-bold text-[var(--text-secondary)] mb-4">EmailJS Configuration</h3>
+                                    <h3 className="font-bold text-[var(--text-secondary)] mb-4 mt-8">📧 Email Отримувачі (за ролями)</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                                        <div>
+                                            <label className="text-xs font-bold text-[var(--text-muted)] uppercase">Оператор (Зміни)</label>
+                                            <input
+                                                className="w-full border border-[var(--border-color)] bg-[var(--bg-input)] rounded px-3 py-2 text-sm mt-1 text-[var(--text-primary)]"
+                                                placeholder="shifto@example.com"
+                                                defaultValue={localStorage.getItem('email_recipient_operator') || ''}
+                                                onChange={e => localStorage.setItem('email_recipient_operator', e.target.value)}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-[var(--text-muted)] uppercase">Лабораторія</label>
+                                            <input
+                                                className="w-full border border-[var(--border-color)] bg-[var(--bg-input)] rounded px-3 py-2 text-sm mt-1 text-[var(--text-primary)]"
+                                                placeholder="lab@example.com"
+                                                defaultValue={localStorage.getItem('email_recipient_lab') || ''}
+                                                onChange={e => localStorage.setItem('email_recipient_lab', e.target.value)}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-[var(--text-muted)] uppercase">Обліковець</label>
+                                            <input
+                                                className="w-full border border-[var(--border-color)] bg-[var(--bg-input)] rounded px-3 py-2 text-sm mt-1 text-[var(--text-primary)]"
+                                                placeholder="accountant@example.com"
+                                                defaultValue={localStorage.getItem('email_recipient_accountant') || ''}
+                                                onChange={e => localStorage.setItem('email_recipient_accountant', e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <h3 className="font-bold text-[var(--text-secondary)] mb-4">⚙️ EmailJS Configuration (Технічні)</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         <div>
                                             <label className="text-xs font-bold text-[var(--text-muted)] uppercase">Service ID</label>
@@ -946,6 +1029,87 @@ export default function AdminInterface() {
                                         </button>
                                     </div>
                                 </div>
+
+                                {/* DANGER ZONE */}
+                                <div className="pt-6 border-t-2 border-red-200">
+                                    <h3 className="text-sm font-bold text-red-600 uppercase tracking-wider mb-4 flex items-center gap-2">
+                                        ⚠️ НЕБЕЗПЕЧНА ЗОНА
+                                    </h3>
+                                    <div className="bg-red-50 border-2 border-red-300 rounded-xl p-6">
+                                        <div className="mb-4">
+                                            <div className="font-bold text-red-800 mb-2">Повне очищення бази даних</div>
+                                            <p className="text-sm text-red-700">
+                                                Видалить ВСІ виробничі дані та палети з Supabase і localStorage.
+                                                <strong> Цю дію НЕ МОЖНА скасувати!</strong>
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={async () => {
+                                                if (!confirm('⚠️ УВАГА!\n\nВи збираєтесь видалити ВСІ дані:\n• Всі бейли (production_items)\n• Всі палети (batches)\n• Всю історію\n\nПродовжити?')) {
+                                                    return;
+                                                }
+
+                                                if (!confirm('⛔ ОСТАННЄ ПОПЕРЕДЖЕННЯ!\n\nВи ВПЕВНЕНІ що хочете видалити ВСЮ базу даних?\n\nНатисніть OK щоб НАЗАВЖДИ видалити всі дані.')) {
+                                                    return;
+                                                }
+
+                                                const btn = event?.target as HTMLButtonElement;
+                                                if (btn) btn.disabled = true;
+
+                                                try {
+                                                    // Clear Supabase tables
+                                                    const { error: itemsError } = await SupabaseService.client
+                                                        .from('production_items')
+                                                        .delete()
+                                                        .neq('id', '00000000-0000-0000-0000-000000000000');
+
+                                                    if (itemsError) throw itemsError;
+
+                                                    const { error: batchesError } = await SupabaseService.client
+                                                        .from('batches')
+                                                        .delete()
+                                                        .neq('id', '00000000-0000-0000-0000-000000000000');
+
+                                                    if (batchesError) throw batchesError;
+
+                                                    // Clear localStorage (preserve settings)
+                                                    const keysToPreserve = [
+                                                        'zebra_printer_v1',
+                                                        'zebra_barcode_pattern_v1',
+                                                        'office_printer_name',
+                                                        'office_printer_ip',
+                                                        'emailjs_service_id',
+                                                        'emailjs_template_id',
+                                                        'emailjs_public_key',
+                                                        'zebra_report_email_v1',
+                                                        'theme'
+                                                    ];
+
+                                                    const preserved: Record<string, string> = {};
+                                                    keysToPreserve.forEach(key => {
+                                                        const val = localStorage.getItem(key);
+                                                        if (val) preserved[key] = val;
+                                                    });
+
+                                                    localStorage.clear();
+
+                                                    Object.entries(preserved).forEach(([key, val]) => {
+                                                        localStorage.setItem(key, val);
+                                                    });
+
+                                                    alert('✅ База даних повністю очищена!\n\nВсі виробничі дані видалено.\nНалаштування збережено.');
+                                                    window.location.reload();
+                                                } catch (e: any) {
+                                                    alert(`❌ Помилка очищення:\n${e.message}\n\nМожливо, потрібно виконати SQL скрипт вручну в Supabase.`);
+                                                    if (btn) btn.disabled = false;
+                                                }
+                                            }}
+                                            className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition-all shadow-lg"
+                                        >
+                                            🗑️ ВИДАЛИТИ ВСЮ БАЗУ ДАНИХ
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         )
                     }
@@ -1018,3 +1182,4 @@ function NavButton({ active, onClick, label, icon }: { active: boolean, onClick:
         </button>
     )
 }
+

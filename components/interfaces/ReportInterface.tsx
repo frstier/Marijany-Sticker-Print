@@ -3,6 +3,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { ProductionService } from '../../services/productionService';
 import { ProductionItem } from '../../types/production';
 import * as XLSX from 'xlsx';
+import PrintHubModal from '../modals/PrintHubModal';
+import { EmailService } from '../../services/email';
 
 type StatusFilter = 'all' | 'created' | 'graded' | 'palletized' | 'shipped';
 
@@ -26,6 +28,7 @@ export default function ReportInterface() {
 
     // UI
     const [logoutConfirm, setLogoutConfirm] = useState(false);
+    const [showPrintHub, setShowPrintHub] = useState(false);
     const printRef = useRef<HTMLDivElement>(null);
 
     // Load data
@@ -49,9 +52,18 @@ export default function ReportInterface() {
     const filteredItems = useMemo(() => {
         return items.filter(item => {
             // Date filter
-            const itemDate = item.date || item.createdAt?.split('T')[0];
-            if (itemDate) {
-                if (itemDate < startDate || itemDate > endDate) return false;
+            let itemDateStr = item.date || item.createdAt?.split('T')[0] || '';
+
+            // Normalize DD.MM.YYYY to YYYY-MM-DD
+            if (itemDateStr.includes('.')) {
+                const parts = itemDateStr.split('.');
+                if (parts.length === 3) {
+                    itemDateStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                }
+            }
+
+            if (itemDateStr) {
+                if (itemDateStr < startDate || itemDateStr > endDate) return false;
             }
 
             // Status filter
@@ -66,7 +78,8 @@ export default function ReportInterface() {
                 const matchSerial = item.serialNumber?.toString().includes(q);
                 const matchProduct = item.productName?.toLowerCase().includes(q);
                 const matchSort = item.sort?.toLowerCase().includes(q);
-                if (!matchSerial && !matchProduct && !matchSort) return false;
+                const matchBatch = item.batchId?.toLowerCase().includes(q);
+                if (!matchSerial && !matchProduct && !matchSort && !matchBatch) return false;
             }
 
             return true;
@@ -74,8 +87,7 @@ export default function ReportInterface() {
             // Sort by date desc, then serial desc
             const dateA = a.createdAt || a.date || '';
             const dateB = b.createdAt || b.date || '';
-            if (dateA !== dateB) return dateB.localeCompare(dateA);
-            return b.serialNumber - a.serialNumber;
+            return dateB.localeCompare(dateA) || (b.serialNumber - a.serialNumber);
         });
     }, [items, startDate, endDate, statusFilter, productFilter, searchQuery]);
 
@@ -106,8 +118,8 @@ export default function ReportInterface() {
         shipped: '🚛 Відвантажено'
     };
 
-    // Export to XLSX
-    const exportToXlsx = () => {
+    // Export Helpers
+    const generateXlsxFile = (): File => {
         const data = filteredItems.map(item => ({
             '№': item.serialNumber,
             'Дата': item.date,
@@ -127,8 +139,85 @@ export default function ReportInterface() {
         const colWidths = Object.keys(data[0] || {}).map(key => ({ wch: Math.max(key.length, 15) }));
         ws['!cols'] = colWidths;
 
-        const filename = `Звіт_продукції_${startDate}_${endDate}.xlsx`;
-        XLSX.writeFile(wb, filename);
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        return new File([blob], `Звіт_продукції_${startDate}_${endDate}.xlsx`, { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    };
+
+    // Export Handler
+    const exportToXlsx = () => {
+        const file = generateXlsxFile();
+        const url = URL.createObjectURL(file);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
+    // Email Handler
+    const handleSendEmail = async () => {
+        let email = '';
+
+        // 1. Try EmailJS (Background sending)
+        if (EmailService.isConfigured()) {
+            // Determine recipient based on role
+            let emailKey = 'email_recipient_accountant'; // default
+            if (currentUser?.role === 'lab') emailKey = 'email_recipient_lab';
+            if (currentUser?.role === 'operator') emailKey = 'email_recipient_operator';
+
+            email = localStorage.getItem(emailKey) || localStorage.getItem('zebra_report_email_v1') || ''; // Fallback to old global
+
+            if (!email) {
+                email = prompt(`Введіть Email отримувача (${currentUser?.role || 'user'}):`) || '';
+                if (email) localStorage.setItem(emailKey, email);
+                else return; // User cancelled
+            }
+
+            if (!confirm(`Відправити звіт на ${email}?`)) return;
+
+            try {
+                const file = generateXlsxFile();
+
+                // Map items to simpler structure
+                const mappedData = filteredItems.map(i => ({
+                    ...i,
+                    product: { name: i.productName },
+                    weight: i.weight.toString()
+                }));
+
+                await EmailService.sendReport(mappedData as any, email, file);
+                alert(`✅ Звіт успішно відправлено на ${email}`);
+                return;
+            } catch (e: any) {
+                console.error(e);
+                alert('⚠️ Помилка EmailJS. Пробуємо стандартний метод...');
+                // Fallthrough to native share
+            }
+        }
+
+        // 2. Native Share / Standard Mail App (No config needed)
+        try {
+            const file = generateXlsxFile();
+            const dateStr = new Date().toLocaleDateString('uk-UA');
+
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({
+                    title: `Звіт ${dateStr}`,
+                    text: `Звіт виробництва за ${dateStr}. Файл додано.`,
+                    files: [file]
+                });
+            } else {
+                // Desktop Fallback
+                alert("📩 Для відправки пошти на цьому пристрої завантажте файл та відправте його вручну.");
+                exportToXlsx();
+            }
+        } catch (e) {
+            console.error(e);
+            alert("❌ Не вдалося відкрити поштову програму.");
+        }
     };
 
     // Print
@@ -180,6 +269,15 @@ export default function ReportInterface() {
 
         printWindow.document.close();
         printWindow.focus();
+
+        // Show printer hint
+        const officePrinter = localStorage.getItem('office_printer_name');
+        const printerIp = localStorage.getItem('office_printer_ip');
+        if (officePrinter || printerIp) {
+            const printerInfo = officePrinter + (printerIp ? ` (${printerIp})` : '');
+            alert(`📄 Друк звіту\n\nВиберіть принтер:\n${printerInfo}`);
+        }
+
         setTimeout(() => {
             printWindow.print();
             printWindow.close();
@@ -196,17 +294,17 @@ export default function ReportInterface() {
     };
 
     return (
-        <div className="flex h-screen bg-slate-100 overflow-hidden">
+        <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--bg-primary)' }}>
             {/* Sidebar */}
-            <aside className="w-64 bg-gradient-to-b from-indigo-900 to-purple-900 text-white flex flex-col shrink-0">
+            <aside className="w-64 text-white flex flex-col shrink-0" style={{ backgroundColor: 'var(--header-bg)' }}>
                 <div className="p-5 border-b border-white/10">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-2xl">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-2xl" style={{ backgroundColor: 'var(--accent-secondary)' }}>
                             📊
                         </div>
                         <div>
-                            <div className="font-bold text-lg">Звіт</div>
-                            <div className="text-[10px] text-white/60 uppercase tracking-wider">Продукція</div>
+                            <div className="font-bold text-lg">HeMP</div>
+                            <div className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.6)' }}>Звіти</div>
                         </div>
                     </div>
                 </div>
@@ -214,7 +312,7 @@ export default function ReportInterface() {
                 {/* Filters */}
                 <div className="flex-1 p-4 space-y-4 overflow-y-auto">
                     <div>
-                        <label className="block text-xs font-bold text-white/60 uppercase mb-1">Від</label>
+                        <label className="block text-xs font-bold uppercase mb-1" style={{ color: 'rgba(255,255,255,0.6)' }}>Від</label>
                         <input
                             type="date"
                             value={startDate}
@@ -223,7 +321,7 @@ export default function ReportInterface() {
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-white/60 uppercase mb-1">До</label>
+                        <label className="block text-xs font-bold uppercase mb-1" style={{ color: 'rgba(255,255,255,0.6)' }}>До</label>
                         <input
                             type="date"
                             value={endDate}
@@ -232,7 +330,7 @@ export default function ReportInterface() {
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-white/60 uppercase mb-1">Статус</label>
+                        <label className="block text-xs font-bold uppercase mb-1" style={{ color: 'rgba(255,255,255,0.6)' }}>Статус</label>
                         <select
                             value={statusFilter}
                             onChange={e => setStatusFilter(e.target.value as StatusFilter)}
@@ -246,7 +344,7 @@ export default function ReportInterface() {
                         </select>
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-white/60 uppercase mb-1">Продукт</label>
+                        <label className="block text-xs font-bold uppercase mb-1" style={{ color: 'rgba(255,255,255,0.6)' }}>Продукт</label>
                         <select
                             value={productFilter}
                             onChange={e => setProductFilter(e.target.value)}
@@ -262,7 +360,8 @@ export default function ReportInterface() {
                     <div className="pt-4 border-t border-white/10">
                         <button
                             onClick={loadData}
-                            className="w-full bg-white/10 hover:bg-white/20 text-white py-2 rounded-lg font-medium transition-all text-sm"
+                            className="w-full py-2 rounded-lg font-medium transition-all text-sm"
+                            style={{ backgroundColor: 'var(--accent-secondary)', color: '#1a1a1a' }}
                         >
                             🔄 Оновити дані
                         </button>
@@ -270,18 +369,18 @@ export default function ReportInterface() {
                 </div>
 
                 {/* Stats */}
-                <div className="p-4 border-t border-white/10 bg-black/20">
-                    <div className="text-xs text-white/60 uppercase mb-2">Статистика</div>
+                <div className="p-4 border-t border-white/10 bg-white/5">
+                    <div className="text-xs uppercase mb-2" style={{ color: 'rgba(255,255,255,0.5)' }}>Статистика</div>
                     <div className="grid grid-cols-2 gap-2 text-sm mb-3">
                         <div className="bg-white/10 rounded px-2 py-1">
-                            <span className="text-white/60">Записів:</span> <span className="font-bold">{stats.count}</span>
+                            <span style={{ color: 'rgba(255,255,255,0.6)' }}>Записів:</span> <span className="font-bold">{stats.count}</span>
                         </div>
                         <div className="bg-white/10 rounded px-2 py-1">
-                            <span className="text-white/60">Вага:</span> <span className="font-bold">{stats.totalWeight.toFixed(1)}</span>
+                            <span style={{ color: 'rgba(255,255,255,0.6)' }}>Вага:</span> <span className="font-bold">{stats.totalWeight.toFixed(1)}</span>
                         </div>
                     </div>
                     {/* Products breakdown */}
-                    <div className="text-xs text-white/60 uppercase mb-1">По продуктах:</div>
+                    <div className="text-xs uppercase mb-1" style={{ color: 'rgba(255,255,255,0.5)' }}>По продуктах:</div>
                     <div className="space-y-1 max-h-32 overflow-y-auto text-xs">
                         {Object.entries(stats.byProduct).sort((a, b) => b[1] - a[1]).map(([product, count]) => (
                             <div key={product} className="flex justify-between bg-white/5 rounded px-2 py-0.5">
@@ -297,7 +396,7 @@ export default function ReportInterface() {
                     <div className="flex items-center justify-between">
                         <div>
                             <div className="font-medium text-sm">{currentUser?.name}</div>
-                            <div className="text-xs text-white/50">Звіт</div>
+                            <div className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Звітування</div>
                         </div>
                         <button
                             onClick={handleLogout}
@@ -345,11 +444,24 @@ export default function ReportInterface() {
                             className="border border-slate-300 rounded-lg px-4 py-2 text-sm w-48"
                         />
                         <button
+                            onClick={() => setShowPrintHub(true)}
+                            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-sm transition-all"
+                        >
+                            🏷️ Менеджер Друку
+                        </button>
+                        <button
                             onClick={exportToXlsx}
                             disabled={filteredItems.length === 0}
                             className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                         >
                             📊 Excel
+                        </button>
+                        <button
+                            onClick={handleSendEmail}
+                            disabled={filteredItems.length === 0}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        >
+                            📧 Email
                         </button>
                         <button
                             onClick={handlePrint}
@@ -427,6 +539,11 @@ export default function ReportInterface() {
                     )}
                 </div>
             </main>
+
+            {/* Print Hub Modal */}
+            {showPrintHub && (
+                <PrintHubModal onClose={() => setShowPrintHub(false)} />
+            )}
         </div>
     );
 }

@@ -5,6 +5,10 @@ import { Product, LabelSizeConfig, User } from './types';
 // For now, I'll export them to make them accessible.
 export { ZPL_100x100_OFFSET };
 
+// BUILD CONFIGURATION
+export const IS_OPERATOR_ONLY_BUILD = false; // Set to true: shows only Operator and Admin users
+
+
 export const PRODUCTS: Product[] = [
   { id: '1', name: 'Довге волокно', name_en: 'Long Fiber', sku: 'LF', category: 'fiber', sorts: ['1', '2', '3', '4'] },
   { id: '2', name: 'Коротке волокно', name_en: 'Short Fiber', sku: 'SF', category: 'fiber', sorts: ['1', '2', '3', '4'] },

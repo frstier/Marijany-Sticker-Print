@@ -339,343 +339,394 @@ export default function LabInterface() {
     };
 
     return (
-        <div className="flex flex-col h-screen font-sans" style={{ backgroundColor: 'var(--bg-primary)' }}>
-            {/* Header - Corporate Green */}
-            <div className="text-white p-3 md:p-4 flex justify-between items-center shadow-lg shrink-0 z-10" style={{ backgroundColor: 'var(--header-bg)' }}>
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white shadow-inner" style={{ backgroundColor: 'var(--accent-secondary)' }}>L</div>
-                    <div>
-                        <div className="font-bold text-lg leading-tight">ЛАБОРАТОРІЯ</div>
-                        <div className="text-[10px] tracking-wider" style={{ color: 'rgba(255,255,255,0.7)' }}>HeMP QC</div>
+        <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--bg-primary)' }}>
+            {/* Sidebar */}
+            <aside className="w-64 text-white flex flex-col shrink-0" style={{ backgroundColor: 'var(--header-bg)' }}>
+                {/* Logo */}
+                <div className="p-5 border-b border-white/20">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg" style={{ backgroundColor: 'var(--accent-secondary)', color: '#1a1a1a' }}>
+                            L
+                        </div>
+                        <div>
+                            <div className="font-bold text-lg">HeMP</div>
+                            <div className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.6)' }}>Лабораторія</div>
+                        </div>
+                        <div className="ml-auto">
+                            <ThemeToggle />
+                        </div>
                     </div>
                 </div>
-                <div className="flex items-center gap-3">
-                    <ThemeToggle />
-                    <div className="flex items-center gap-4">
-                        <span className="opacity-80 text-sm hidden md:inline">{currentUser?.name}</span>
-                        <button
-                            onClick={handleOpenReport}
-                            className="px-4 py-2 rounded text-sm font-bold transition-all"
-                            style={{ backgroundColor: 'var(--accent-secondary)', color: '#1a1a1a' }}
-                        >
-                            📊 Звіти
-                        </button>
+
+                {/* Navigation */}
+                <nav className="flex-1 p-3 space-y-1">
+                    <button
+                        onClick={() => { setShowReport(false); loadData(); }}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-left ${!showReport ? '' : 'hover:bg-white/10'}`}
+                        style={!showReport ? { backgroundColor: 'var(--accent-secondary)', color: '#1a1a1a' } : {}}
+                    >
+                        <span className="text-xl">🧪</span>
+                        <span className="font-medium">Перевірка</span>
+                        <span className="ml-auto text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>{pendingItems.length}</span>
+                    </button>
+
+                    <button
+                        onClick={handleOpenReport}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-left ${showReport ? '' : 'hover:bg-white/10'}`}
+                        style={showReport ? { backgroundColor: 'var(--accent-secondary)', color: '#1a1a1a' } : {}}
+                    >
+                        <span className="text-xl">📊</span>
+                        <span className="font-medium">Звіти</span>
+                    </button>
+                </nav>
+
+                {/* Stats by Product */}
+                <div className="p-4 border-t border-white/10">
+                    <div className="text-xs uppercase mb-2" style={{ color: 'rgba(255,255,255,0.5)' }}>По продуктах</div>
+                    <div className="space-y-1 text-sm max-h-32 overflow-y-auto">
+                        {uniqueProducts.map(product => (
+                            <div key={product} className="bg-white/10 rounded px-2 py-1 flex justify-between">
+                                <span className="text-white/60 truncate" style={{ maxWidth: '140px' }}>{product.length > 18 ? product.substring(0, 16) + '...' : product}</span>
+                                <span className="font-bold">{pendingItems.filter(i => i.productName === product).length}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* User & Logout */}
+                <div className="p-4 border-t border-white/10 bg-white/5">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className="font-medium text-sm">{currentUser?.name}</div>
+                            <div className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Лаборант</div>
+                        </div>
                         <button
                             onClick={handleLogoutClick}
-                            className={`px-4 py-2 rounded text-sm transition-all font-bold border ${logoutConfirm
-                                ? 'bg-red-500 text-white border-red-400 animate-pulse'
-                                : ''}`}
-                            style={!logoutConfirm ? { backgroundColor: 'rgba(255,255,255,0.2)', borderColor: 'rgba(255,255,255,0.3)' } : {}}
+                            className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${logoutConfirm ? 'bg-red-500 text-white animate-pulse' : 'bg-white/10 hover:bg-white/20 text-white'}`}
                         >
-                            {logoutConfirm ? 'Підтвердити?' : 'Вийти'}
+                            {logoutConfirm ? '?' : '🚪'}
                         </button>
                     </div>
                 </div>
-            </div>
+            </aside>
 
-            {/* Notification Banner */}
-            {showNotification && NotificationService.shouldShowNotification(pendingCount) && (
-                <NotificationBanner
-                    count={pendingCount}
-                    message={`Є ${pendingCount} неоприходуваних бейлів — перевірте список!`}
-                    onDismiss={() => setShowNotification(false)}
-                />
-            )}
+            {/* Main Content */}
+            <main className="flex-1 flex flex-col overflow-hidden">
+                {/* Notification Banner */}
+                {showNotification && NotificationService.shouldShowNotification(pendingCount) && (
+                    <NotificationBanner
+                        count={pendingCount}
+                        message={`Є ${pendingCount} неоприходуваних бейлів — перевірте список!`}
+                        onDismiss={() => setShowNotification(false)}
+                    />
+                )}
 
-            {/* Split View */}
-            <div className="flex-1 flex overflow-hidden">
-
-                {/* LEFT: List */}
-                <div className="w-full md:w-1/3 bg-white border-r border-slate-200 flex flex-col">
-                    <div className="p-4 border-b border-slate-100 bg-slate-50">
-                        <div className="flex justify-between items-center mb-2">
-                            <h2 className="text-lg font-bold text-slate-800">На Перевірку <span className="text-purple-600">({pendingItems.length})</span></h2>
-                            <button
-                                onClick={() => {
-                                    setBatchMode(!batchMode);
-                                    if (!batchMode) {
-                                        setSelectedItem(null);
-                                    } else {
-                                        setSelectedIds(new Set());
-                                    }
-                                }}
-                                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${batchMode
-                                    ? 'bg-purple-600 text-white'
-                                    : 'bg-slate-200 text-slate-600 hover:bg-purple-100'
-                                    }`}
-                            >
-                                {batchMode ? '☑️ Пакетний' : '🔲 Пакетний'}
-                            </button>
-                        </div>
-                        <input
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Пошук по №..."
-                            className="w-full p-2 rounded-lg border border-slate-300 focus:border-purple-500 text-sm"
-                        />
-                        {/* Product Filter Buttons */}
-                        {uniqueProducts.length > 1 && (
-                            <div className="mt-2 flex flex-wrap gap-1">
-                                <button
-                                    onClick={() => setProductFilter('')}
-                                    className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${!productFilter
-                                        ? 'bg-purple-600 text-white'
-                                        : 'bg-slate-100 text-slate-600 hover:bg-purple-100'
-                                        }`}
-                                >
-                                    Всі ({pendingItems.length})
-                                </button>
-                                {uniqueProducts.map(product => (
+                {!showReport ? (
+                    /* Main Lab View - Split */
+                    <div className="flex-1 flex overflow-hidden">
+                        {/* LEFT: List */}
+                        <div className="w-full md:w-1/3 flex flex-col border-r" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+                            <div className="p-4 border-b" style={{ borderColor: 'var(--border-color)' }}>
+                                <div className="flex justify-between items-center mb-2">
+                                    <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>На Перевірку <span style={{ color: 'var(--accent-primary)' }}>({pendingItems.length})</span></h2>
                                     <button
-                                        key={product}
-                                        onClick={() => setProductFilter(product)}
-                                        className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${productFilter === product
-                                            ? 'bg-purple-600 text-white'
-                                            : 'bg-slate-100 text-slate-600 hover:bg-purple-100'
+                                        onClick={() => {
+                                            setBatchMode(!batchMode);
+                                            if (!batchMode) {
+                                                setSelectedItem(null);
+                                            } else {
+                                                setSelectedIds(new Set());
+                                            }
+                                        }}
+                                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${batchMode
+                                            ? 'text-white'
+                                            : ''
                                             }`}
+                                        style={batchMode ? { backgroundColor: 'var(--accent-primary)' } : { backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
                                     >
-                                        {product.length > 15 ? product.substring(0, 13) + '...' : product} ({pendingItems.filter(i => i.productName === product).length})
+                                        {batchMode ? '☑️ Пакетний' : '🔲 Пакетний'}
                                     </button>
-                                ))}
-                            </div>
-                        )}
-                        {/* Select All in batch mode */}
-                        {batchMode && filteredItems.length > 0 && (
-                            <div className="mt-2 flex items-center gap-2">
+                                </div>
                                 <input
-                                    type="checkbox"
-                                    checked={selectedIds.size === filteredItems.length && filteredItems.length > 0}
-                                    onChange={selectAll}
-                                    className="w-7 h-7 accent-purple-600 cursor-pointer"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="Пошук по №..."
+                                    className="w-full p-2 rounded-lg border text-sm"
+                                    style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
                                 />
-                                <span className="text-sm text-slate-600">
-                                    Обрати всі ({selectedIds.size} / {filteredItems.length})
-                                </span>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto">
-                        {filteredItems.length === 0 ? (
-                            <div className="p-8 text-center text-slate-400 text-sm">Список порожній</div>
-                        ) : (
-                            filteredItems.map(item => (
-                                <div
-                                    key={item.id}
-                                    onClick={() => batchMode ? toggleItemSelect(item.id) : setSelectedItem(item)}
-                                    className={`p-4 border-b border-slate-100 cursor-pointer transition-colors hover:bg-slate-50 flex items-center gap-3 ${batchMode
-                                        ? (selectedIds.has(item.id) ? 'bg-purple-50 border-l-4 border-l-purple-600' : '')
-                                        : (selectedItem?.id === item.id ? 'bg-purple-50 border-l-4 border-l-purple-600' : '')
-                                        }`}
-                                >
-                                    {batchMode && (
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedIds.has(item.id)}
-                                            onChange={() => toggleItemSelect(item.id)}
-                                            onClick={(e) => e.stopPropagation()}
-                                            className="w-7 h-7 accent-purple-600 shrink-0 cursor-pointer"
-                                        />
-                                    )}
-                                    <div className="flex-1">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <div className="font-bold text-slate-800">№ {item.serialNumber}</div>
-                                            <div className="text-xs font-mono text-slate-500 bg-slate-100 px-2 rounded">{item.weight} кг</div>
-                                        </div>
-                                        <div className="flex justify-between items-end">
-                                            <div className="text-xs text-slate-500">{item.productName} | {item.date}</div>
-                                            <div className="text-[10px] uppercase text-purple-400 font-bold tracking-wider">Pending</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))
-                        )}
-                    </div>
-                </div>
-
-                {/* RIGHT: Detail & Action */}
-                <div className="flex-1 bg-slate-50 flex flex-col items-center justify-center p-6">
-                    {batchMode ? (
-                        // Batch Mode Panel
-                        <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden animate-fade-in">
-                            <div className="bg-purple-50 p-6 border-b border-purple-100">
-                                <div className="text-xs font-bold text-purple-600 uppercase mb-1">Пакетне Сортування</div>
-                                <div className="text-3xl font-bold text-slate-800">
-                                    Обрано: {selectedIds.size} бейлів
-                                </div>
-                            </div>
-
-                            {selectedIds.size === 0 ? (
-                                <div className="p-8 text-center text-slate-400">
-                                    <div className="text-6xl mb-4">☑️</div>
-                                    <p>Оберіть бейли зі списку зліва для пакетного сортування</p>
-                                </div>
-                            ) : (
-                                <div className="p-8">
-                                    <label className="block text-center text-sm font-bold text-slate-500 mb-4 uppercase tracking-widest">
-                                        Оберіть Якість для всіх обраних
-                                    </label>
-
-                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-                                        {['1', '2', '3', '4', 'Нестандарт'].map(sort => (
+                                {/* Product Filter Buttons */}
+                                {uniqueProducts.length > 1 && (
+                                    <div className="mt-2 flex flex-wrap gap-1">
+                                        <button
+                                            onClick={() => setProductFilter('')}
+                                            className={`px-2 py-1 rounded-lg text-xs font-bold transition-all`}
+                                            style={!productFilter ? { backgroundColor: 'var(--accent-primary)', color: 'white' } : { backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+                                        >
+                                            Всі ({pendingItems.length})
+                                        </button>
+                                        {uniqueProducts.map(product => (
                                             <button
-                                                key={sort}
-                                                onClick={() => setSelectedSort(sort)}
-                                                className={`p-4 rounded-xl font-bold transition-all text-sm md:text-base ${selectedSort === sort
-                                                    ? 'bg-purple-600 text-white shadow-lg scale-105'
-                                                    : 'bg-white border-2 border-slate-100 text-slate-600 hover:border-purple-300'
-                                                    }`}
+                                                key={product}
+                                                onClick={() => setProductFilter(product)}
+                                                className={`px-2 py-1 rounded-lg text-xs font-bold transition-all`}
+                                                style={productFilter === product ? { backgroundColor: 'var(--accent-primary)', color: 'white' } : { backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
                                             >
-                                                {sort}
+                                                {product.length > 15 ? product.substring(0, 13) + '...' : product} ({pendingItems.filter(i => i.productName === product).length})
                                             </button>
                                         ))}
                                     </div>
+                                )}
+                                {/* Select All in batch mode */}
+                                {batchMode && filteredItems.length > 0 && (
+                                    <div className="mt-2 flex items-center gap-2">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedIds.size === filteredItems.length && filteredItems.length > 0}
+                                            onChange={selectAll}
+                                            className="w-7 h-7 cursor-pointer"
+                                            style={{ accentColor: 'var(--accent-primary)' }}
+                                        />
+                                        <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                                            Обрати всі ({selectedIds.size} / {filteredItems.length})
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
 
-                                    <button
-                                        onClick={handleBatchGrade}
-                                        disabled={!selectedSort}
-                                        className={`w-full py-4 rounded-xl font-bold text-xl shadow-xl transition-all flex items-center justify-center gap-3 ${selectedSort
-                                            ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-900/20 active:scale-95'
-                                            : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                                            }`}
-                                    >
-                                        <span>СОРТУВАТИ {selectedIds.size} БЕЙЛІВ</span>
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    </button>
+                            <div className="flex-1 overflow-y-auto">
+                                {filteredItems.length === 0 ? (
+                                    <div className="p-8 text-center text-sm" style={{ color: 'var(--text-muted)' }}>Список порожній</div>
+                                ) : (
+                                    filteredItems.map(item => (
+                                        <div
+                                            key={item.id}
+                                            onClick={() => batchMode ? toggleItemSelect(item.id) : setSelectedItem(item)}
+                                            className={`p-4 border-b cursor-pointer transition-colors flex items-center gap-3 ${batchMode
+                                                ? (selectedIds.has(item.id) ? 'border-l-4' : '')
+                                                : (selectedItem?.id === item.id ? 'border-l-4' : '')
+                                                }`}
+                                            style={{
+                                                borderColor: 'var(--border-color)',
+                                                backgroundColor: (batchMode ? selectedIds.has(item.id) : selectedItem?.id === item.id) ? 'var(--bg-tertiary)' : 'transparent',
+                                                borderLeftColor: (batchMode ? selectedIds.has(item.id) : selectedItem?.id === item.id) ? 'var(--accent-primary)' : 'var(--border-color)'
+                                            }}
+                                        >
+                                            {batchMode && (
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedIds.has(item.id)}
+                                                    onChange={() => toggleItemSelect(item.id)}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="w-7 h-7 shrink-0 cursor-pointer"
+                                                    style={{ accentColor: 'var(--accent-primary)' }}
+                                                />
+                                            )}
+                                            <div className="flex-1">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <div className="font-bold" style={{ color: 'var(--text-primary)' }}>№ {item.serialNumber}</div>
+                                                    <div className="text-xs font-mono px-2 rounded" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>{item.weight} кг</div>
+                                                </div>
+                                                <div className="flex justify-between items-end">
+                                                    <div className="text-xs" style={{ color: 'var(--text-muted)' }}>{item.productName} | {item.date}</div>
+                                                    <div className="text-[10px] uppercase font-bold tracking-wider" style={{ color: 'var(--accent-primary)' }}>Pending</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+
+                        {/* RIGHT: Detail & Action */}
+                        <div className="flex-1 flex flex-col items-center justify-center p-6" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                            {batchMode ? (
+                                // Batch Mode Panel
+                                <div className="w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden" style={{ backgroundColor: 'var(--bg-card)' }}>
+                                    <div className="p-6 border-b" style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-color)' }}>
+                                        <div className="text-xs font-bold uppercase mb-1" style={{ color: 'var(--accent-primary)' }}>Пакетне Сортування</div>
+                                        <div className="text-3xl font-bold" style={{ color: 'var(--text-primary)' }}>
+                                            Обрано: {selectedIds.size} бейлів
+                                        </div>
+                                    </div>
+
+                                    {selectedIds.size === 0 ? (
+                                        <div className="p-8 text-center" style={{ color: 'var(--text-muted)' }}>
+                                            <div className="text-6xl mb-4">☑️</div>
+                                            <p>Оберіть бейли зі списку зліва для пакетного сортування</p>
+                                        </div>
+                                    ) : (
+                                        <div className="p-8">
+                                            <label className="block text-center text-sm font-bold mb-4 uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>
+                                                Оберіть Якість для всіх обраних
+                                            </label>
+
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+                                                {['1', '2', '3', '4', 'Нестандарт'].map(sort => (
+                                                    <button
+                                                        key={sort}
+                                                        onClick={() => setSelectedSort(sort)}
+                                                        className={`p-4 rounded-xl font-bold transition-all text-sm md:text-base ${selectedSort === sort
+                                                            ? 'text-white shadow-lg scale-105'
+                                                            : 'border-2'
+                                                            }`}
+                                                        style={selectedSort === sort
+                                                            ? { backgroundColor: 'var(--accent-primary)' }
+                                                            : { backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', color: 'var(--text-secondary)' }
+                                                        }
+                                                    >
+                                                        {sort}
+                                                    </button>
+                                                ))}
+                                            </div>
+
+                                            <button
+                                                onClick={handleBatchGrade}
+                                                disabled={!selectedSort}
+                                                className={`w-full py-4 rounded-xl font-bold text-xl shadow-xl transition-all flex items-center justify-center gap-3 ${selectedSort
+                                                    ? 'bg-green-600 hover:bg-green-700 text-white active:scale-95'
+                                                    : 'cursor-not-allowed'
+                                                    }`}
+                                                style={!selectedSort ? { backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' } : {}}
+                                            >
+                                                <span>СОРТУВАТИ {selectedIds.size} БЕЙЛІВ</span>
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : !selectedItem ? (
+                                <div className="text-center max-w-sm" style={{ color: 'var(--text-muted)' }}>
+                                    <div className="text-6xl mb-4">👈</div>
+                                    <h3 className="text-xl font-bold mb-2">Оберіть бейл зі списку</h3>
+                                    <p>Натисніть на запис зліва, щоб провести експертизу та присвоїти сорт.</p>
+                                </div>
+                            ) : (
+                                <div className="w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden" style={{ backgroundColor: 'var(--bg-card)' }}>
+                                    <div className="p-6 border-b" style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-color)' }}>
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <div className="text-xs font-bold uppercase mb-1" style={{ color: 'var(--accent-primary)' }}>Обраний Бейл</div>
+                                                <div className="text-3xl font-bold" style={{ color: 'var(--text-primary)' }}>№ {selectedItem.serialNumber}</div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-4xl font-bold" style={{ color: 'var(--text-primary)' }}>{selectedItem.weight} <span className="text-lg font-normal" style={{ color: 'var(--text-muted)' }}>кг</span></div>
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-4 p-3 rounded-xl border shadow-sm" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+                                            <div className="text-xs uppercase tracking-widest font-bold mb-1" style={{ color: 'var(--text-muted)' }}>Продукт</div>
+                                            <div className="text-xl font-bold leading-none" style={{ color: 'var(--text-primary)' }}>{selectedItem.productName}</div>
+                                        </div>
+
+                                        <div className="mt-2 text-[10px] font-mono text-center" style={{ color: 'var(--text-muted)' }}>
+                                            {selectedItem.barcode}
+                                        </div>
+                                    </div>
+
+                                    <div className="p-8">
+                                        <label className="block text-center text-sm font-bold mb-4 uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Оберіть Якість</label>
+
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+                                            {currentSorts.map(sort => (
+                                                <button
+                                                    key={sort}
+                                                    onClick={() => setSelectedSort(sort)}
+                                                    className={`p-4 rounded-xl font-bold transition-all text-sm md:text-base ${selectedSort === sort
+                                                        ? 'text-white shadow-lg scale-105'
+                                                        : 'border-2'
+                                                        }`}
+                                                    style={selectedSort === sort
+                                                        ? { backgroundColor: 'var(--accent-primary)' }
+                                                        : { backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', color: 'var(--text-secondary)' }
+                                                    }
+                                                >
+                                                    {sort}
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        <button
+                                            onClick={handleGrade}
+                                            disabled={!selectedSort}
+                                            className={`w-full py-4 rounded-xl font-bold text-xl shadow-xl transition-all flex items-center justify-center gap-3 ${selectedSort
+                                                ? 'bg-green-600 hover:bg-green-700 text-white active:scale-95'
+                                                : 'cursor-not-allowed'
+                                                }`}
+                                            style={!selectedSort ? { backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' } : {}}
+                                        >
+                                            <span>ПІДТВЕРДИТИ</span>
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
-                    ) : !selectedItem ? (
-                        <div className="text-center text-slate-400 max-w-sm">
-                            <div className="text-6xl mb-4">👈</div>
-                            <h3 className="text-xl font-bold mb-2">Оберіть бейл зі списку</h3>
-                            <p>Натисніть на запис зліва, щоб провести експертизу та присвоїти сорт.</p>
-                        </div>
-                    ) : (
-                        <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden animate-fade-in">
-                            <div className="bg-purple-50 p-6 border-b border-purple-100">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <div className="text-xs font-bold text-purple-600 uppercase mb-1">Обраний Бейл</div>
-                                        <div className="text-3xl font-bold text-slate-800">№ {selectedItem.serialNumber}</div>
-                                    </div>
-                                    <div className="text-right">
-                                        <div className="text-4xl font-bold text-slate-800">{selectedItem.weight} <span className="text-lg text-slate-400 font-normal">кг</span></div>
-                                    </div>
-                                </div>
-
-                                <div className="mt-4 bg-white p-3 rounded-xl border border-purple-100 shadow-sm">
-                                    <div className="text-xs text-slate-400 uppercase tracking-widest font-bold mb-1">Продукт</div>
-                                    <div className="text-xl font-bold text-slate-800 leading-none">{selectedItem.productName}</div>
-                                </div>
-
-                                <div className="mt-2 text-[10px] font-mono text-slate-400 text-center">
-                                    {selectedItem.barcode}
-                                </div>
+                    </div>
+                ) : (
+                    /* Report View - Inline instead of Modal */
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                        {/* Report Header */}
+                        <header className="px-6 py-4 flex items-center justify-between shrink-0 border-b" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+                            <div>
+                                <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Звіт Лабораторії</h1>
+                                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Генерація звіту за період</p>
                             </div>
-
-                            <div className="p-8">
-                                <label className="block text-center text-sm font-bold text-slate-500 mb-4 uppercase tracking-widest">Оберіть Якість</label>
-
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-                                    {currentSorts.map(sort => (
-                                        <button
-                                            key={sort}
-                                            onClick={() => setSelectedSort(sort)}
-                                            className={`p-4 rounded-xl font-bold transition-all text-sm md:text-base ${selectedSort === sort
-                                                ? 'bg-purple-600 text-white shadow-lg scale-105'
-                                                : 'bg-white border-2 border-slate-100 text-slate-600 hover:border-purple-300'
-                                                }`}
-                                        >
-                                            {sort}
-                                        </button>
-                                    ))}
+                            <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-2">
+                                    <label className="text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>Від:</label>
+                                    <input
+                                        type="date"
+                                        value={startDate}
+                                        onChange={(e) => setStartDate(e.target.value)}
+                                        className="border rounded px-2 py-1 text-sm font-mono"
+                                        style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
+                                    />
                                 </div>
-
+                                <div className="flex items-center gap-2">
+                                    <label className="text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>До:</label>
+                                    <input
+                                        type="date"
+                                        value={endDate}
+                                        onChange={(e) => setEndDate(e.target.value)}
+                                        className="border rounded px-2 py-1 text-sm font-mono"
+                                        style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
+                                    />
+                                </div>
                                 <button
-                                    onClick={handleGrade}
-                                    disabled={!selectedSort}
-                                    className={`w-full py-4 rounded-xl font-bold text-xl shadow-xl transition-all flex items-center justify-center gap-3 ${selectedSort
-                                        ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-900/20 active:scale-95'
-                                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                                        }`}
+                                    onClick={loadReportData}
+                                    className="px-3 py-1 rounded text-sm font-bold"
+                                    style={{ backgroundColor: 'var(--accent-secondary)', color: '#1a1a1a' }}
                                 >
-                                    <span>ПІДТВЕРДИТИ</span>
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                    </svg>
+                                    🔄 Оновити
                                 </button>
                             </div>
-                        </div>
-                    )}
-                </div>
+                        </header>
 
-            </div>
-
-            {/* Report Modal */}
-            {showReport && (
-                <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col overflow-hidden">
-                        {/* Header */}
-                        <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white p-6 flex justify-between items-center shrink-0">
-                            <div>
-                                <h2 className="text-2xl font-bold">Звіт Лабораторії</h2>
-                                <p className="text-sm opacity-80">Генерація звіту за період</p>
-                            </div>
-                            <button onClick={() => setShowReport(false)} className="text-white/70 hover:text-white text-3xl">×</button>
-                        </div>
-
-                        {/* Controls (Date Range) */}
-                        <div className="p-4 bg-white border-b border-slate-200 flex flex-wrap gap-4 items-center">
-                            <div className="flex items-center gap-2">
-                                <label className="text-sm font-bold text-slate-600">Від:</label>
-                                <input
-                                    type="date"
-                                    value={startDate}
-                                    onChange={(e) => setStartDate(e.target.value)}
-                                    className="border border-slate-300 rounded px-2 py-1 text-sm font-mono"
-                                />
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <label className="text-sm font-bold text-slate-600">До:</label>
-                                <input
-                                    type="date"
-                                    value={endDate}
-                                    onChange={(e) => setEndDate(e.target.value)}
-                                    className="border border-slate-300 rounded px-2 py-1 text-sm font-mono"
-                                />
-                            </div>
-                            <button
-                                onClick={loadReportData}
-                                className="px-3 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm font-bold"
-                            >
-                                🔄 Оновити
-                            </button>
-                        </div>
-
-                        {/* Summary Stats (Dynamic based on reportItems) */}
-                        <div className="p-4 bg-purple-50 border-b border-purple-100">
+                        {/* Report Stats */}
+                        <div className="p-4 border-b" style={{ backgroundColor: 'var(--bg-tertiary)', borderColor: 'var(--border-color)' }}>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                                <div className="text-center bg-white p-3 rounded-xl border border-purple-100">
-                                    <div className="text-3xl font-bold text-purple-700">{reportItems.length}</div>
-                                    <div className="text-xs text-purple-500 uppercase font-bold">Всього бейлів</div>
+                                <div className="text-center p-3 rounded-xl border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+                                    <div className="text-3xl font-bold" style={{ color: 'var(--accent-primary)' }}>{reportItems.length}</div>
+                                    <div className="text-xs uppercase font-bold" style={{ color: 'var(--text-muted)' }}>Всього бейлів</div>
                                 </div>
-                                <div className="text-center bg-white p-3 rounded-xl border border-purple-100">
+                                <div className="text-center p-3 rounded-xl border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
                                     <div className="text-3xl font-bold text-green-600">{reportItems.reduce((sum, i) => sum + i.weight, 0).toFixed(1)}</div>
-                                    <div className="text-xs text-green-500 uppercase font-bold">Вага (кг)</div>
+                                    <div className="text-xs uppercase font-bold text-green-500">Вага (кг)</div>
                                 </div>
-                                <div className="text-center bg-white p-3 rounded-xl border border-purple-100">
+                                <div className="text-center p-3 rounded-xl border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
                                     <div className="text-3xl font-bold text-blue-600">{[...new Set(reportItems.map(i => i.sort))].length}</div>
-                                    <div className="text-xs text-blue-500 uppercase font-bold">Сортів</div>
+                                    <div className="text-xs uppercase font-bold text-blue-500">Сортів</div>
                                 </div>
-                                <div className="text-center bg-white p-3 rounded-xl border border-purple-100">
+                                <div className="text-center p-3 rounded-xl border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
                                     <div className="text-3xl font-bold text-orange-600">{[...new Set(reportItems.map(i => i.productName))].length}</div>
-                                    <div className="text-xs text-orange-500 uppercase font-bold">Продуктів</div>
+                                    <div className="text-xs uppercase font-bold text-orange-500">Продуктів</div>
                                 </div>
                             </div>
-                            {/* Detailed Aggregation by Product/Sort */}
+                            {/* Sort badges */}
                             <div className="flex gap-2 overflow-x-auto pb-2">
                                 {Object.entries(reportItems.reduce((acc, item) => {
                                     const key = item.sort || 'No Sort';
@@ -683,163 +734,67 @@ export default function LabInterface() {
                                     acc[key]++;
                                     return acc;
                                 }, {} as Record<string, number>)).map(([sort, count]) => (
-                                    <span key={sort} className="px-3 py-1 bg-white border border-purple-200 rounded-lg text-xs font-bold text-purple-700 whitespace-nowrap">
+                                    <span key={sort} className="px-3 py-1 border rounded-lg text-xs font-bold whitespace-nowrap" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', color: 'var(--accent-primary)' }}>
                                         {sort}: {count}
                                     </span>
                                 ))}
                             </div>
                         </div>
 
-                        {/* Actions Toolbar */}
-                        <div className="p-4 bg-white border-b border-slate-200 flex flex-wrap gap-3 items-center justify-between">
-                            <div className="flex gap-2 w-full md:w-auto">
-                                <button
-                                    onClick={() => {
-                                        const printWindow = window.open('', '_blank');
-                                        if (!printWindow) return;
-
-                                        // Group items by Product Name
-                                        const groupedItems: Record<string, ProductionItem[]> = {};
-                                        reportItems.forEach(item => {
-                                            const key = item.productName || 'Інше';
-                                            if (!groupedItems[key]) groupedItems[key] = [];
-                                            groupedItems[key].push(item);
-                                        });
-
-                                        // Generate HTML for each group
-                                        let tablesHtml = '';
-                                        const totalWeight = reportItems.reduce((sum, i) => sum + i.weight, 0).toFixed(2);
-
-                                        Object.entries(groupedItems).forEach(([productName, items]) => {
-                                            const groupWeight = items.reduce((sum, i) => sum + i.weight, 0).toFixed(2);
-                                            const rows = items.map(item => `
-                                                <tr>
-                                                    <td>${item.date}</td>
-                                                    <td style="font-family: monospace;">${item.barcode}</td>
-                                                    <td>${item.serialNumber}</td>
-                                                    <td style="text-align: right;">${item.weight} кг</td>
-                                                    <td>${item.sort || '-'}</td>
-                                                </tr>
-                                            `).join('');
-
-                                            tablesHtml += `
-                                                <div class="product-section">
-                                                    <h2>${productName}</h2>
-                                                    <table>
-                                                        <thead>
-                                                            <tr>
-                                                                <th>Дата</th>
-                                                                <th>UID</th>
-                                                                <th>№</th>
-                                                                <th>Вага (кг)</th>
-                                                                <th>Сорт</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>${rows}</tbody>
-                                                    </table>
-                                                    <div class="subtotal">
-                                                        Всього по ${productName}: ${items.length} шт | Вага: ${groupWeight} кг
-                                                    </div>
-                                                </div>
-                                            `;
-                                        });
-
-                                        // Format date range string
-                                        const dateStr = startDate === endDate ?
-                                            new Date(startDate).toLocaleDateString('uk-UA') :
-                                            `${new Date(startDate).toLocaleDateString('uk-UA')} - ${new Date(endDate).toLocaleDateString('uk-UA')}`;
-
-                                        printWindow.document.write(`
-                                            <html>
-                                            <head>
-                                                <title>Звіт Лабораторії</title>
-                                                <style>
-                                                    body { font-family: Arial, sans-serif; padding: 20px; }
-                                                    h1 { text-align: center; font-size: 24px; margin-bottom: 5px; text-transform: uppercase; }
-                                                    h2 { font-size: 18px; margin-top: 30px; margin-bottom: 10px; border-bottom: 2px solid #ddd; padding-bottom: 5px; color: #444; }
-                                                    .meta { text-align: center; font-size: 14px; margin-bottom: 20px; color: #555; }
-                                                    table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 10px; }
-                                                    th, td { border: 1px solid #000; padding: 6px 10px; text-align: left; }
-                                                    th { background-color: #f2f2f2; font-weight: bold; text-align: center; }
-                                                    .subtotal { text-align: right; font-weight: bold; font-size: 12px; margin-bottom: 20px; }
-                                                    .grand-total { margin-top: 40px; text-align: right; font-size: 16px; font-weight: bold; border-top: 2px solid #000; padding-top: 10px; }
-                                                    @media print { 
-                                                        @page { margin: 10mm; } 
-                                                        .product-section { break-inside: avoid; }
-                                                    }
-                                                </style>
-                                            </head>
-                                            <body>
-                                                <h1>Звіт Лабораторії</h1>
-                                                <div class="meta">за ${dateStr}</div>
-                                                
-                                                ${tablesHtml}
-                                                
-                                                <div class="grand-total">
-                                                    ЗАГАЛОМ: ${reportItems.length} шт | ВАГА: ${totalWeight} кг
-                                                </div>
-                                            </body>
-                                            </html>
-                                         `);
-                                        printWindow.document.close();
-                                        printWindow.focus();
-                                        setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
-                                    }}
-                                    className="flex-1 md:flex-none px-4 py-2 bg-slate-800 text-white rounded-lg font-bold hover:bg-slate-900 shadow-lg flex items-center justify-center gap-2"
-                                >
-                                    🖨️ Друк (PDF)
-                                </button>
-                                <button
-                                    onClick={handleDownloadXLSX}
-                                    className="flex-1 md:flex-none px-4 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 shadow-lg flex items-center justify-center gap-2"
-                                >
-                                    📊 Excel
-                                </button>
-                            </div>
-
-                            <div className="flex gap-2 w-full md:w-auto">
+                        {/* Action Buttons */}
+                        <div className="p-4 border-b flex flex-wrap gap-3" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+                            <button
+                                onClick={handleDownloadXLSX}
+                                className="px-4 py-2 rounded-lg font-bold flex items-center gap-2"
+                                style={{ backgroundColor: 'var(--accent-primary)', color: 'white' }}
+                            >
+                                📥 Завантажити XLSX
+                            </button>
+                            <div className="flex items-center gap-2">
                                 <input
                                     type="email"
                                     value={reportEmail}
                                     onChange={(e) => setReportEmail(e.target.value)}
-                                    placeholder="Email..."
-                                    className="flex-1 px-4 py-2 border border-slate-300 rounded-lg"
+                                    placeholder="email@example.com"
+                                    className="px-3 py-2 rounded-lg border text-sm w-48"
+                                    style={{ backgroundColor: 'var(--bg-input)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
                                 />
                                 <button
                                     onClick={handleSendEmail}
                                     disabled={!reportEmail || emailSending}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 disabled:bg-slate-300 shadow-lg"
+                                    className="px-4 py-2 rounded-lg font-bold disabled:opacity-50"
+                                    style={{ backgroundColor: 'var(--accent-secondary)', color: '#1a1a1a' }}
                                 >
-                                    📧 Send
+                                    {emailSending ? '⏳' : '📧'} Email
                                 </button>
                             </div>
                         </div>
 
-                        {/* List */}
-                        <div className="flex-1 overflow-y-auto p-4">
+                        {/* Report Table */}
+                        <div className="flex-1 overflow-auto p-4">
                             {reportItems.length === 0 ? (
-                                <div className="text-center py-16 text-slate-400">
-                                    <div className="text-6xl mb-4">📋</div>
-                                    <p>Немає бейлів за обраний період</p>
+                                <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
+                                    <div className="text-5xl mb-4">📭</div>
+                                    <p>Немає даних за вказаний період</p>
                                 </div>
                             ) : (
-                                <table className="w-full text-sm border-separate border-spacing-0">
-                                    <thead className="bg-slate-100 sticky top-0 z-10">
-                                        <tr>
-                                            <th className="p-3 text-left font-bold border-b">№</th>
-                                            <th className="p-3 text-left font-bold border-b">Продукт</th>
-                                            <th className="p-3 text-left font-bold border-b">Сорт</th>
-                                            <th className="p-3 text-right font-bold border-b">Вага</th>
-                                            <th className="p-3 text-left font-bold border-b">Дата</th>
-                                            <th className="p-3 text-left font-bold border-b">UID</th>
-                                            <th className="p-3 text-right font-bold border-b">Дії</th>
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                                            <th className="p-3 text-left font-bold" style={{ color: 'var(--text-secondary)' }}>№</th>
+                                            <th className="p-3 text-left font-bold" style={{ color: 'var(--text-secondary)' }}>Продукт</th>
+                                            <th className="p-3 text-left font-bold" style={{ color: 'var(--text-secondary)' }}>Сорт</th>
+                                            <th className="p-3 text-right font-bold" style={{ color: 'var(--text-secondary)' }}>Вага</th>
+                                            <th className="p-3 text-left font-bold" style={{ color: 'var(--text-secondary)' }}>Дата</th>
+                                            <th className="p-3 text-left font-bold" style={{ color: 'var(--text-secondary)' }}>UID</th>
+                                            <th className="p-3 text-right font-bold" style={{ color: 'var(--text-secondary)' }}>Дія</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-100">
+                                    <tbody>
                                         {reportItems.map(item => (
-                                            <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                                                <td className="p-3 font-mono font-bold text-slate-700">{item.serialNumber}</td>
-                                                <td className="p-3 font-medium">{item.productName}</td>
+                                            <tr key={item.id} className="border-b" style={{ borderColor: 'var(--border-color)' }}>
+                                                <td className="p-3 font-mono font-bold" style={{ color: 'var(--text-primary)' }}>{item.serialNumber}</td>
+                                                <td className="p-3 font-medium" style={{ color: 'var(--text-primary)' }}>{item.productName}</td>
                                                 <td className="p-3">
                                                     <span className={`px-2 py-1 rounded-full text-xs font-bold ${item.sort?.includes('1') ? 'bg-green-100 text-green-700' :
                                                         item.sort?.includes('Брак') ? 'bg-red-100 text-red-700' :
@@ -848,16 +803,16 @@ export default function LabInterface() {
                                                         {item.sort}
                                                     </span>
                                                 </td>
-                                                <td className="p-3 text-right font-mono font-bold">{item.weight}</td>
-                                                <td className="p-3 text-slate-500 text-xs">{item.date}</td>
-                                                <td className="p-3 font-mono text-xs text-slate-400">{item.barcode}</td>
+                                                <td className="p-3 text-right font-mono font-bold" style={{ color: 'var(--text-primary)' }}>{item.weight}</td>
+                                                <td className="p-3" style={{ color: 'var(--text-muted)' }}>{item.date}</td>
+                                                <td className="p-3 font-mono text-xs" style={{ color: 'var(--text-muted)' }}>{item.barcode}</td>
                                                 <td className="p-3 text-right">
-                                                    {/* Only allow revert if not palletized?? For now allow if graded. */}
                                                     <button
                                                         onClick={() => requestRevertGrade(item)}
-                                                        disabled={item.status !== 'graded'} // Disable if already palletized
-                                                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1 ml-auto ${item.status !== 'graded' ? 'bg-slate-100 text-slate-300 opacity-50 cursor-not-allowed' : 'bg-white border border-slate-200 hover:bg-red-50 hover:border-red-200 text-slate-600 hover:text-red-600'
+                                                        disabled={item.status !== 'graded'}
+                                                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1 ml-auto ${item.status !== 'graded' ? 'opacity-50 cursor-not-allowed' : 'hover:bg-red-50'
                                                             }`}
+                                                        style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', color: 'var(--text-secondary)' }}
                                                         title="Повернути на перевірку"
                                                     >
                                                         ↩️ Скасувати
@@ -870,8 +825,8 @@ export default function LabInterface() {
                             )}
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+            </main>
 
             {/* Revert Grade Confirmation Dialog */}
             <ConfirmDialog

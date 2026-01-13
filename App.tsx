@@ -1,4 +1,5 @@
 import React from 'react';
+import { IS_OPERATOR_ONLY_BUILD } from './constants';
 import { useAuth } from './hooks/useAuth';
 import LoginScreen from './components/LoginScreen';
 import StandardInterface from './components/interfaces/StandardInterface';
@@ -7,6 +8,7 @@ import LabInterface from './components/interfaces/LabInterface';
 import AdminInterface from './components/interfaces/AdminInterface';
 import ReportInterface from './components/interfaces/ReportInterface';
 import ReceivingInterface from './components/interfaces/ReceivingInterface';
+import FormuvalnykInterface from './components/interfaces/FormuvalnykInterface';
 
 import { UserService } from './services/userService';
 import { ConfigService } from './services/configService';
@@ -24,7 +26,13 @@ export default function App() {
         });
 
         UserService.getUsers().then(data => {
-            setUsers(data);
+            // Apply build configuration filter
+            // If IS_OPERATOR_ONLY_BUILD is true, show Operator AND Admin (per user request)
+            const filteredData = IS_OPERATOR_ONLY_BUILD
+                ? data.filter(u => u.role === 'operator' || u.role === 'admin')
+                : data;
+
+            setUsers(filteredData);
             setLoadingUsers(false);
         });
     }, []);
@@ -60,6 +68,10 @@ export default function App() {
 
     if (currentUser.role === 'receiving') {
         return <ReceivingInterface />;
+    }
+
+    if (currentUser.role === 'formuvalnyk') {
+        return <FormuvalnykInterface />;
     }
 
     // Default to Standard Interface

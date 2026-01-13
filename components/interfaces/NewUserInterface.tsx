@@ -492,7 +492,7 @@ ${itemsZpl}
                                 pallets.map(pallet => (
                                     <div key={pallet.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow">
                                         <div className="bg-slate-800 text-white p-4">
-                                            <div className="font-mono font-bold text-xl">#{pallet.id}</div>
+                                            <div className="font-mono font-bold text-xl">#{pallet.displayId || pallet.id}</div>
                                             <div className="text-slate-400 text-sm">{pallet.date}</div>
                                         </div>
                                         <div className="p-4">

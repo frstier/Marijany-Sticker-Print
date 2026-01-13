@@ -154,7 +154,8 @@ export default function PrintHubModal({ onClose }: PrintHubModalProps) {
         const logoPath = import.meta.env.BASE_URL + 'logo_bw.png';
         let logoZpl = '';
         try {
-            logoZpl = await zebraService.convertImageToZPL(logoPath, { width: 200, height: 240 });
+            // Original logo is 153x125, maintain aspect ratio ~1.22:1
+            logoZpl = await zebraService.convertImageToZPL(logoPath, { width: 180, height: 148 });
         } catch (e) { console.warn("Logo load failed", e); }
 
         const pattern = localStorage.getItem('zebra_barcode_pattern_v1') || '{date}-{sku}-{serialNumber}-{weight}';

@@ -34,19 +34,24 @@ body {
   --safe-area-right: env(safe-area-inset-right, 0px);
 
   /* Corporate Colors - Pantone */
-  --corp-primary: #006747;      /* Pantone 343 C - Deep Green */
+  --corp-primary: #006747;
+  /* Pantone 343 C - Deep Green */
   --corp-primary-light: #008556;
   --corp-primary-dark: #004d35;
-  --corp-accent: #CDA349;       /* Pantone 7407 C - Gold */
+  --corp-accent: #CDA349;
+  /* Pantone 7407 C - Gold */
   --corp-accent-light: #d9b56a;
   --corp-accent-dark: #b8923a;
-  --corp-gray: #D9D9D6;         /* Pantone Cool Gray 1 C */
+  --corp-gray: #D9D9D6;
+  /* Pantone Cool Gray 1 C */
   --corp-gray-dark: #a8a8a5;
 }
 
 /* Theme Colors - Light Mode */
-.theme-light, :root {
-  --bg-primary: #D9D9D6;        /* Cool Gray 1 C */
+.theme-light,
+:root {
+  --bg-primary: #D9D9D6;
+  /* Cool Gray 1 C */
   --bg-secondary: #ffffff;
   --bg-tertiary: #f0f0ed;
   --bg-card: #ffffff;
@@ -55,9 +60,11 @@ body {
   --text-secondary: #4a4a4a;
   --text-muted: #7a7a7a;
   --border-color: #c5c5c2;
-  --accent-primary: #006747;    /* Pantone 343 C */
+  --accent-primary: #006747;
+  /* Pantone 343 C */
   --accent-hover: #004d35;
-  --accent-secondary: #CDA349;  /* Pantone 7407 C */
+  --accent-secondary: #CDA349;
+  /* Pantone 7407 C */
   --accent-secondary-hover: #b8923a;
   --shadow-color: rgba(0, 0, 0, 0.12);
   --header-bg: #006747;
@@ -65,7 +72,8 @@ body {
 }
 
 /* Dark Mode */
-.theme-dark, [data-theme="dark"] {
+.theme-dark,
+[data-theme="dark"] {
   --bg-primary: #1a1a1a;
   --bg-secondary: #252525;
   --bg-tertiary: #333333;
@@ -75,9 +83,11 @@ body {
   --text-secondary: #c5c5c2;
   --text-muted: #8a8a8a;
   --border-color: #4a4a4a;
-  --accent-primary: #008556;    /* Lighter green for dark mode */
+  --accent-primary: #008556;
+  /* Lighter green for dark mode */
   --accent-hover: #006747;
-  --accent-secondary: #CDA349;  /* Gold stays same */
+  --accent-secondary: #CDA349;
+  /* Gold stays same */
   --accent-secondary-hover: #d9b56a;
   --shadow-color: rgba(0, 0, 0, 0.4);
   --header-bg: #006747;

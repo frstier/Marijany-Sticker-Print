@@ -147,7 +147,17 @@ export default function AccountantReport({ onClose }: AccountantReportProps) {
         if (printWindow) {
             printWindow.document.write(printContent);
             printWindow.document.close();
-            // printWindow.print(); // Let user trigger print
+
+            // Show printer hint
+            const officePrinter = localStorage.getItem('office_printer_name');
+            const printerIp = localStorage.getItem('office_printer_ip');
+            if (officePrinter || printerIp) {
+                const printerInfo = officePrinter + (printerIp ? ` (${printerIp})` : '');
+                alert(`📄 Друк звіту обліковця\n\nВиберіть принтер:\n${printerInfo}`);
+            }
+
+            // Let user trigger print manually or automatically
+            // printWindow.print(); 
         }
     };
 

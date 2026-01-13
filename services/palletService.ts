@@ -101,35 +101,45 @@ export const PalletService = {
         }
 
         if (USE_SUPABASE && supabase) {
-            try {
-                // Insert into Supabase
-                const { data, error } = await supabase
-                    .from('batches')
-                    .insert({
-                        sort,
-                        product_name: productName,
-                        status: 'active',
-                        batch_number: id // Store the formatted ID
-                    })
-                    .select()
-                    .single();
+            const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
-                if (error) throw error;
+            // Insert into Supabase
+            const { data, error } = await supabase
+                .from('batches')
+                .insert({
+                    sort,
+                    product_name: productName,
+                    status: 'active',
+                    batch_number: id, // Store the formatted ID
+                    date: today
+                })
+                .select()
+                .single();
 
-                return {
-                    id: data.id,
-                    displayId: data.batch_number, // Ensure UI uses this
-                    date: data.created_at,
-                    items: [],
-                    totalWeight: 0,
-                    sort: data.sort,
-                    status: data.status as any
-                };
-            } catch (e) {
-                console.error("Supabase createBatch failed", e);
+            if (error) {
+                console.error("❌ Supabase createBatch FAILED:", error);
+                throw new Error(`Failed to create batch: ${error.message}`);
             }
+
+            if (!data) {
+                console.error("❌ Supabase createBatch returned no data");
+                throw new Error("Failed to create batch: No data returned");
+            }
+
+            console.log("✅ Batch created successfully:", data.id, "Display:", data.batch_number);
+
+            return {
+                id: data.id, // UUID for internal use
+                displayId: data.batch_number, // Formatted ID for display
+                date: data.created_at,
+                items: [],
+                totalWeight: 0,
+                sort: data.sort,
+                status: data.status as any
+            };
         }
 
+        // Local fallback (only if Supabase not enabled)
         const newBatch: Batch = {
             id,
             displayId: id,
@@ -140,7 +150,7 @@ export const PalletService = {
             status: 'open'
         };
 
-        const localBatches = await this.getBatches(); // Fetch local
+        const localBatches = await this.getBatches();
         localBatches.push(newBatch);
         this.saveBatches(localBatches);
         return newBatch;

@@ -152,16 +152,19 @@ export default function PalletBuilder({ onClose, onComplete }: PalletBuilderProp
         const productNameEn = ''; // Can be added later if needed
         const sku = firstItem?.sku || '';
 
-        // Generate items list with barcodes (compact, 2 columns)
+        // Calculate total weight from items (in case batch.totalWeight is 0)
+        const totalWeight = batch.items.reduce((sum, item) => sum + item.weight, 0);
+
+        // Generate items list with barcodes (2 columns × 6 rows)
         const itemsListZpl = batch.items.map((item, idx) => {
-            const col = idx < 10 ? 0 : 1;
-            const row = idx % 10;
-            const x = 30 + (col * 390);
-            const y = 220 + (row * 50);
+            const col = idx < 6 ? 0 : 1; // First 6 in left column, rest in right
+            const row = idx % 6; // 6 rows per column
+            const x = 30 + (col * 390); // Original position
+            const y = 220 + (row * 70); // Increased spacing for larger barcodes
             // Serial + weight text
             const textLine = `^FO${x},${y}^A0N,20,20^FH^FD${idx + 1}. #${item.serialNumber} ${item.weight.toFixed(1)}kg^FS`;
-            // Mini barcode below
-            const barcodeLine = `^FO${x},${y + 22}^BY1^BCN,25,N,N,N^FD${item.barcode || item.serialNumber}^FS`;
+            // Larger barcode below
+            const barcodeLine = `^FO${x},${y + 22}^BY1^BCN,40,N,N,N^FD${item.barcode || item.serialNumber}^FS`;
             return textLine + '\n' + barcodeLine;
         }).join('\n');
 
@@ -190,16 +193,16 @@ export default function PalletBuilder({ onClose, onComplete }: PalletBuilderProp
 
 ${itemsListZpl}
 
-^FO20,720^GB760,2,2^FS
+^FO20,685^GB760,2,2^FS
 
-^FO30,730^A0N,22,22^FH^FD${toHex('К-сть:')}^FS
-^FO130,725^A0N,32,32^FH^FD${batch.items.length} ${toHex('шт')}^FS
-^FO300,730^A0N,22,22^FH^FD${toHex('Вага:')}^FS
-^FO400,720^A0N,40,40^FH^FD${batch.totalWeight.toFixed(1)} kg^FS
+^FO30,695^A0N,22,22^FH^FD${toHex('К-сть:')}^FS
+^FO130,690^A0N,32,32^FH^FD${batch.items.length} ${toHex('шт')}^FS
+^FO300,695^A0N,22,22^FH^FD${toHex('Вага:')}^FS
+^FO400,685^A0N,40,40^FH^FD${totalWeight.toFixed(1)} kg^FS
 
-^FO180,760^BY2
+^FO30,740^BY2
 ^BCN,30,Y,N,N
-^FD${batch.id}^FS
+^FD${displayId}^FS
 
 ^XZ`;
     };

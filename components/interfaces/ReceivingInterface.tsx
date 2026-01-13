@@ -4,9 +4,14 @@ import ExcelImportModal from '../modals/ExcelImportModal';
 import PrintHubModal from '../modals/PrintHubModal';
 import ThemeToggle from '../ThemeToggle';
 
+type ViewMode = 'import' | 'printhub';
+
 export default function ReceivingInterface() {
     const { logout, currentUser } = useAuth();
     const [logoutConfirm, setLogoutConfirm] = useState(false);
+
+    // View Mode
+    const [activeView, setActiveView] = useState<ViewMode>('import');
 
     // Feature State
     const [excelImportOpen, setExcelImportOpen] = useState(false);
@@ -22,85 +27,120 @@ export default function ReceivingInterface() {
     };
 
     return (
-        <div className="min-h-screen flex flex-col" style={{ backgroundColor: 'var(--bg-primary)' }}>
-            {/* Header - Corporate Green */}
-            <header className="text-white p-4 shadow-lg flex justify-between items-center sticky top-0 z-50" style={{ backgroundColor: 'var(--header-bg)' }}>
-                <div className="flex items-center gap-4">
-                    <div className="p-2 bg-white/10 rounded-lg text-2xl">📦</div>
-                    <div>
-                        <h1 className="text-xl font-bold leading-none">Приймання</h1>
-                        <p className="text-xs opacity-70">Склад & Імпорт</p>
+        <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--bg-primary)' }}>
+            {/* Sidebar */}
+            <aside className="w-64 text-white flex flex-col shrink-0" style={{ backgroundColor: 'var(--header-bg)' }}>
+                {/* Logo */}
+                <div className="p-5 border-b border-white/20">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-2xl" style={{ backgroundColor: 'var(--accent-secondary)' }}>
+                            📦
+                        </div>
+                        <div>
+                            <div className="font-bold text-lg">HeMP</div>
+                            <div className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.6)' }}>Приймання</div>
+                        </div>
+                        <div className="ml-auto">
+                            <ThemeToggle />
+                        </div>
                     </div>
                 </div>
-                <div className="flex items-center gap-4">
-                    <ThemeToggle />
-                    <div className="text-right hidden sm:block">
-                        <div className="text-sm font-bold">{currentUser?.name}</div>
-                        <div className="text-xs uppercase tracking-wider opacity-70">{currentUser?.role}</div>
-                    </div>
+
+                {/* Navigation */}
+                <nav className="flex-1 p-3 space-y-1">
                     <button
-                        onClick={handleLogoutClick}
-                        className={`transition-all px-6 py-2 rounded-lg text-sm font-bold shadow-lg ${logoutConfirm
-                            ? 'bg-red-600 text-white animate-pulse ring-2 ring-red-300'
-                            : 'bg-red-500 hover:bg-red-600 text-white'}`}
+                        onClick={() => setActiveView('import')}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-left ${activeView === 'import' ? '' : 'hover:bg-white/10'}`}
+                        style={activeView === 'import' ? { backgroundColor: 'var(--accent-secondary)', color: '#1a1a1a' } : {}}
                     >
-                        {logoutConfirm ? 'Підтвердити?' : 'Вихід'}
+                        <span className="text-xl">📥</span>
+                        <span className="font-medium">Excel Імпорт</span>
                     </button>
+
+                    <button
+                        onClick={() => setActiveView('printhub')}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-left ${activeView === 'printhub' ? '' : 'hover:bg-white/10'}`}
+                        style={activeView === 'printhub' ? { backgroundColor: 'var(--accent-secondary)', color: '#1a1a1a' } : {}}
+                    >
+                        <span className="text-xl">🖨️</span>
+                        <span className="font-medium">Print Hub</span>
+                    </button>
+
+                    <button
+                        disabled
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left opacity-40 cursor-not-allowed"
+                    >
+                        <span className="text-xl grayscale">🚚</span>
+                        <span className="font-medium">Відвантаження</span>
+                        <span className="ml-auto text-[10px] px-1.5 py-0.5 bg-white/20 rounded">TBD</span>
+                    </button>
+                </nav>
+
+                {/* User & Logout */}
+                <div className="p-4 border-t border-white/10 bg-white/5">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className="font-medium text-sm">{currentUser?.name}</div>
+                            <div className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>Приймальник</div>
+                        </div>
+                        <button
+                            onClick={handleLogoutClick}
+                            className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${logoutConfirm ? 'bg-red-500 text-white animate-pulse' : 'bg-white/10 hover:bg-white/20 text-white'}`}
+                        >
+                            {logoutConfirm ? '?' : '🚪'}
+                        </button>
+                    </div>
                 </div>
-            </header>
+            </aside>
 
             {/* Main Content */}
-            <main className="flex-1 p-6 max-w-7xl mx-auto w-full">
+            <main className="flex-1 flex flex-col overflow-hidden">
+                {/* Header */}
+                <header className="px-6 py-4 border-b shrink-0" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+                    <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+                        {activeView === 'import' ? 'Excel Імпорт' : 'Print Hub'}
+                    </h1>
+                    <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                        {activeView === 'import'
+                            ? 'Завантаження нових партій товару з файлів Excel (.xlsx)'
+                            : 'Керування чергою друку та масовий друк стікерів'
+                        }
+                    </p>
+                </header>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-                    {/* CARD 1: EXCEL IMPORT */}
+                {/* Content */}
+                <div className="flex-1 flex items-center justify-center p-8" style={{ backgroundColor: 'var(--bg-secondary)' }}>
                     <div
-                        onClick={() => setExcelImportOpen(true)}
-                        className="rounded-2xl p-8 shadow-sm hover:shadow-xl transition-all cursor-pointer border-2 border-transparent group relative overflow-hidden"
+                        onClick={() => activeView === 'import' ? setExcelImportOpen(true) : setPrintHubOpen(true)}
+                        className="max-w-md w-full rounded-2xl p-10 shadow-xl cursor-pointer border-2 hover:shadow-2xl transition-all group"
                         style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
                     >
-                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                            <span className="text-9xl">📊</span>
-                        </div>
-                        <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition-transform shadow-sm" style={{ backgroundColor: 'var(--accent-secondary)', opacity: 0.9 }}>
-                            📥
-                        </div>
-                        <h3 className="text-2xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Excel Імпорт</h3>
-                        <p style={{ color: 'var(--text-secondary)' }}>Завантаження нових партій товару з файлів Excel (.xlsx).</p>
-                        <div className="mt-8 flex items-center font-bold group-hover:translate-x-2 transition-transform" style={{ color: 'var(--accent-primary)' }}>
-                            Завантажити файл <span className="ml-2">→</span>
-                        </div>
-                    </div>
-
-                    {/* CARD 2: PRINT HUB */}
-                    <div
-                        onClick={() => setPrintHubOpen(true)}
-                        className="rounded-2xl p-8 shadow-sm hover:shadow-xl transition-all cursor-pointer border-2 border-transparent group relative overflow-hidden"
-                        style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
-                    >
-                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                            <span className="text-9xl">🖨️</span>
-                        </div>
-                        <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-6 group-hover:scale-110 transition-transform shadow-sm" style={{ backgroundColor: 'var(--accent-primary)', color: 'white' }}>
-                            ⚙️
-                        </div>
-                        <h3 className="text-2xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Print Hub</h3>
-                        <p style={{ color: 'var(--text-secondary)' }}>Керування чергою друку та масовий друк стікерів для партій.</p>
-                        <div className="mt-8 flex items-center font-bold group-hover:translate-x-2 transition-transform" style={{ color: 'var(--accent-primary)' }}>
-                            Відкрити менеджер <span className="ml-2">→</span>
+                        <div className="text-center">
+                            <div
+                                className="w-24 h-24 mx-auto rounded-3xl flex items-center justify-center text-5xl mb-6 group-hover:scale-110 transition-transform shadow-lg"
+                                style={{ backgroundColor: activeView === 'import' ? 'var(--accent-secondary)' : 'var(--accent-primary)' }}
+                            >
+                                {activeView === 'import' ? '📥' : '🖨️'}
+                            </div>
+                            <h2 className="text-2xl font-bold mb-3" style={{ color: 'var(--text-primary)' }}>
+                                {activeView === 'import' ? 'Завантажити Excel файл' : 'Відкрити Print Hub'}
+                            </h2>
+                            <p className="mb-8" style={{ color: 'var(--text-secondary)' }}>
+                                {activeView === 'import'
+                                    ? 'Оберіть .xlsx файл з даними партії для імпорту в систему'
+                                    : 'Друкуйте стікери для всіх бейлів з черги'
+                                }
+                            </p>
+                            <div
+                                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-lg transition-all group-hover:scale-105"
+                                style={{ backgroundColor: 'var(--accent-primary)', color: 'white' }}
+                            >
+                                {activeView === 'import' ? 'Обрати файл' : 'Відкрити'}
+                                <span>→</span>
+                            </div>
                         </div>
                     </div>
-
-                    {/* CARD 3: SHIPPING (PLACEHOLDER) */}
-                    <div className="bg-slate-50 rounded-2xl p-8 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-center opacity-70">
-                        <div className="text-4xl mb-4 grayscale">🚚</div>
-                        <h3 className="text-xl font-bold text-slate-400 mb-1">Відвантаження</h3>
-                        <p className="text-sm text-slate-400">Цей модуль знаходиться в розробці</p>
-                    </div>
-
                 </div>
-
             </main>
 
             {/* Modals */}

@@ -1,7 +1,7 @@
 // Basic Product Types
 export type ProductCategory = 'fiber' | 'shiv' | 'dust';
 
-export type UserRole = 'accountant' | 'lab' | 'agro' | 'admin' | 'operator' | 'report' | 'postgres_user' | 'receiving';
+export type UserRole = 'accountant' | 'lab' | 'agro' | 'admin' | 'operator' | 'report' | 'postgres_user' | 'receiving' | 'shipping' | 'formuvalnyk';
 
 export interface User {
   id: string;

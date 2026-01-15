@@ -21,7 +21,7 @@ DROP TABLE IF EXISTS products CASCADE;
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('accountant', 'lab', 'agro', 'admin', 'operator', 'report', 'postgres_user', 'receiving')),
+    role TEXT NOT NULL CHECK (role IN ('accountant', 'lab', 'agro', 'admin', 'operator', 'report', 'postgres_user', 'receiving', 'shipping', 'formuvalnyk')),
     pin TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -181,7 +181,8 @@ INSERT INTO users (name, role, pin) VALUES
     ('Обліковець', 'accountant', '3333'),
     ('Адміністратор', 'admin', '0000'),
     ('Агро', 'agro', '4444'),
-    ('Звіти', 'report', '5555');
+    ('Звіти', 'report', '5555'),
+    ('Логістика', 'shipping', '6666');
 
 -- =====================================================
 -- 10. SEED DATA - Default Products

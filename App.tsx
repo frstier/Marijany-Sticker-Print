@@ -9,6 +9,7 @@ import AdminInterface from './components/interfaces/AdminInterface';
 import ReportInterface from './components/interfaces/ReportInterface';
 import ReceivingInterface from './components/interfaces/ReceivingInterface';
 import FormuvalnykInterface from './components/interfaces/FormuvalnykInterface';
+import ShippingInterface from './components/interfaces/ShippingInterface';
 
 import { UserService } from './services/userService';
 import { ConfigService } from './services/configService';
@@ -72,6 +73,10 @@ export default function App() {
 
     if (currentUser.role === 'formuvalnyk') {
         return <FormuvalnykInterface />;
+    }
+
+    if (currentUser.role === 'shipping') {
+        return <ShippingInterface />;
     }
 
     // Default to Standard Interface

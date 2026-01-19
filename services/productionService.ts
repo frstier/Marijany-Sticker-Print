@@ -380,18 +380,25 @@ export const ProductionService = {
         }
     },
 
-    async gradeItem(id: string, sort: string, userId: string, notes?: string): Promise<ProductionItem> {
+    async gradeItem(id: string, sort: string, userId: string, notes?: string, labData?: Record<string, number | undefined>): Promise<ProductionItem> {
         if (USE_SUPABASE && supabase) {
             try {
+                const updateData: any = {
+                    status: 'graded',
+                    sort: sort,
+                    lab_notes: notes,
+                    lab_user_id: userId,
+                    updated_at: new Date().toISOString()
+                };
+
+                // Add lab_data if provided
+                if (labData && Object.keys(labData).length > 0) {
+                    updateData.lab_data = labData;
+                }
+
                 const { data, error } = await supabase
                     .from('production_items')
-                    .update({
-                        status: 'graded',
-                        sort: sort,
-                        lab_notes: notes, // Save notes
-                        lab_user_id: userId,
-                        updated_at: new Date().toISOString()
-                    })
+                    .update(updateData)
                     .eq('id', id)
                     .select()
                     .single();
@@ -409,13 +416,14 @@ export const ProductionService = {
                     status: data.status,
                     sort: data.sort,
                     labNotes: data.lab_notes,
+                    labData: data.lab_data,
                     barcode: data.barcode,
                     createdAt: data.created_at,
                     updatedAt: data.updated_at
                 };
             } catch (e) {
                 console.error("Supabase Grade Failed", e);
-                throw e; // Propagate error so UI knows
+                throw e;
             }
         }
 
@@ -430,6 +438,7 @@ export const ProductionService = {
             sort,
             gradedAt: new Date().toISOString(),
             labNotes: notes,
+            labData,
             labUserId: userId
         };
         items[idx] = updatedItem;

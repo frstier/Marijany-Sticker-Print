@@ -17,7 +17,8 @@ export interface ProductionItem {
 
     // Lab Data
     sort?: string;
-    labNotes?: string; // Added field
+    labNotes?: string;
+    labData?: Record<string, number | undefined>; // Quality parameters
     gradedAt?: string;
     labUserId?: string;
     operatorId?: string; // Operator who printed it

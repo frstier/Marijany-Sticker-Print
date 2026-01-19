@@ -9,6 +9,7 @@ import ConfirmDialog from '../ConfirmDialog';
 import ThemeToggle from '../ThemeToggle';
 import LocationSelector from '../warehouse/LocationSelector';
 import { LocationService } from '../../services/locationService';
+import LabQualityForm, { LabData } from '../lab/LabQualityForm';
 
 
 export default function LabInterface() {
@@ -21,6 +22,9 @@ export default function LabInterface() {
     const [selectedSort, setSelectedSort] = useState<string>('');
     const [searchQuery, setSearchQuery] = useState('');
     const deferredSearchQuery = useDeferredValue(searchQuery);
+
+    // Lab quality data for current item
+    const [labData, setLabData] = useState<LabData>({});
 
     // Product filter
     const [productFilter, setProductFilter] = useState<string>('');
@@ -273,10 +277,17 @@ export default function LabInterface() {
     const handleGrade = async () => {
         if (!selectedItem || !selectedSort) return;
         try {
-            await ProductionService.gradeItem(selectedItem.id, selectedSort, currentUser?.id || 'unknown');
+            await ProductionService.gradeItem(
+                selectedItem.id,
+                selectedSort,
+                currentUser?.id || 'unknown',
+                undefined,
+                labData
+            );
             // Refresh list
             loadData();
             setSelectedSort('');
+            setLabData({});
         } catch (e) {
             console.error(e);
         }
@@ -631,32 +642,19 @@ export default function LabInterface() {
                                         </div>
                                     </div>
 
-                                    <div className="p-8">
-                                        <label className="block text-center text-sm font-bold mb-4 uppercase tracking-widest" style={{ color: 'var(--text-secondary)' }}>Оберіть Якість</label>
-
-                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-                                            {currentSorts.map(sort => (
-                                                <button
-                                                    key={sort}
-                                                    onClick={() => setSelectedSort(sort)}
-                                                    className={`p-4 rounded-xl font-bold transition-all text-sm md:text-base ${selectedSort === sort
-                                                        ? 'text-white shadow-lg scale-105'
-                                                        : 'border-2'
-                                                        }`}
-                                                    style={selectedSort === sort
-                                                        ? { backgroundColor: 'var(--accent-primary)' }
-                                                        : { backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', color: 'var(--text-secondary)' }
-                                                    }
-                                                >
-                                                    {sort}
-                                                </button>
-                                            ))}
-                                        </div>
+                                    <div className="p-6 max-h-[60vh] overflow-y-auto">
+                                        <LabQualityForm
+                                            productName={selectedItem.productName}
+                                            values={labData}
+                                            onChange={setLabData}
+                                            sort={selectedSort}
+                                            onSortChange={setSelectedSort}
+                                        />
 
                                         <button
                                             onClick={handleGrade}
                                             disabled={!selectedSort}
-                                            className={`w-full py-4 rounded-xl font-bold text-xl shadow-xl transition-all flex items-center justify-center gap-3 ${selectedSort
+                                            className={`w-full mt-6 py-4 rounded-xl font-bold text-xl shadow-xl transition-all flex items-center justify-center gap-3 ${selectedSort
                                                 ? 'bg-green-600 hover:bg-green-700 text-white active:scale-95'
                                                 : 'cursor-not-allowed'
                                                 }`}
@@ -817,8 +815,8 @@ export default function LabInterface() {
                                                     <button
                                                         onClick={() => setLocationModalItem(item)}
                                                         className={`px-2 py-1 rounded text-xs font-medium border transition-colors ${item.locationId
-                                                                ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
-                                                                : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                                                            ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                                                            : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
                                                             }`}
                                                     >
                                                         {item.locationId ? '📍 Змінити' : '➕ Призначити'}

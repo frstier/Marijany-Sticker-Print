@@ -26,6 +26,7 @@ import QRScanner from '../QRScanner';
 import LabelDesigner from '../LabelDesigner';
 import ConfirmDialog from '../ConfirmDialog';
 import LocationSearch from '../warehouse/LocationSearch';
+import InventoryInterface from './InventoryInterface';
 // import ExcelImportModal from '../modals/ExcelImportModal'; // MOVED TO RECEIVING
 // import PrintHubModal from '../modals/PrintHubModal'; // MOVED TO RECEIVING
 
@@ -65,6 +66,7 @@ export default function AdminInterface() {
     const [showAuditLog, setShowAuditLog] = useState(false);
     const [showQRScanner, setShowQRScanner] = useState(false);
     const [showLabelDesigner, setShowLabelDesigner] = useState(false);
+    const [showInventory, setShowInventory] = useState(false);
 
     // Delete User Confirmation Dialog State
     const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; user: User | null }>({ isOpen: false, user: null });
@@ -1028,6 +1030,16 @@ export default function AdminInterface() {
                                                 <div>QR/Barcode</div>
                                             </div>
                                         </button>
+                                        <button
+                                            onClick={() => setShowInventory(true)}
+                                            className="flex items-center gap-3 p-4 bg-gradient-to-br from-purple-500 to-violet-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
+                                        >
+                                            <span className="text-2xl">📋</span>
+                                            <div className="text-left">
+                                                <div className="text-sm opacity-80">Інвентаризація</div>
+                                                <div>Inventory</div>
+                                            </div>
+                                        </button>
                                     </div>
                                 </div>
 
@@ -1142,6 +1154,11 @@ export default function AdminInterface() {
                     <LabelDesigner onClose={() => setShowLabelDesigner(false)} printer={printerData.printer} />
                 )
             }
+            {showInventory && (
+                <div className="fixed inset-0 z-[200]">
+                    <InventoryInterface onBack={() => setShowInventory(false)} />
+                </div>
+            )}
 
             {/* Delete User Confirmation Dialog */}
             <ConfirmDialog

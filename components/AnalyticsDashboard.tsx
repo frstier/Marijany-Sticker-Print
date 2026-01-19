@@ -162,7 +162,7 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ items, onClose,
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         {[
                             { label: 'Сьогодні', value: stats?.today ?? 0, icon: '📅' },
-                            { label: 'На складі', value: stats?.inStock ?? 0, icon: '🏭' }, // Changed from Week
+                            { label: 'Склад зберігання', value: stats?.inStock ?? 0, icon: '🏭' },
                             { label: 'Відвантажено', value: stats?.shipped ?? 0, icon: '🚛' }, // Changed from Month
                             { label: 'Всього зроблено', value: stats?.total ?? 0, icon: '🏷️' }
                         ].map(stat => (

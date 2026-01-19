@@ -331,7 +331,7 @@ ${itemsZpl}
 
                 {/* Quick Stats */}
                 <div className="p-4 border-t border-slate-700">
-                    <div className="text-xs text-slate-500 uppercase mb-2">На складі</div>
+                    <div className="text-xs text-slate-500 uppercase mb-2">Склад зберігання</div>
                     <div className="grid grid-cols-2 gap-2 text-sm">
                         {Object.entries(stats.bySort).slice(0, 4).map(([sort, count]) => (
                             <div key={sort} className="bg-slate-800 rounded px-2 py-1">

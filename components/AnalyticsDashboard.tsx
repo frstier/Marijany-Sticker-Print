@@ -12,7 +12,7 @@ import {
     ArcElement
 } from 'chart.js';
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
-import { LabelData } from '../types';
+import { ProductionItem } from '../types/production';
 
 // Register ChartJS components
 ChartJS.register(
@@ -65,26 +65,60 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ items, onClose,
 
         // Top products
         const productCounts: { [key: string]: number } = {};
+        const productWeights: { [key: string]: number[] } = {};
         const shippedCount = currentItems.filter(i => i.status === 'shipped').length;
         const palletizedCount = currentItems.filter(i => i.status === 'palletized').length;
         const inStockCount = currentItems.filter(i => i.status === 'created' || i.status === 'graded').length;
 
+        // Sort distribution
+        const sortCounts: { [key: string]: number } = {};
+
         currentItems.forEach(p => {
             const name = p.productName || 'Невідомо';
             productCounts[name] = (productCounts[name] || 0) + 1;
+
+            // Track weights per product for average
+            if (!productWeights[name]) productWeights[name] = [];
+            if (p.weight) productWeights[name].push(p.weight);
+
+            // Track sort distribution
+            const sortKey = p.sort || 'Без сорту';
+            sortCounts[sortKey] = (sortCounts[sortKey] || 0) + 1;
         });
+
         const topProducts = Object.entries(productCounts)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 5);
 
+        // Average weight by product
+        const avgWeightByProduct = Object.entries(productWeights).map(([name, weights]) => ({
+            name,
+            avgWeight: weights.length > 0
+                ? (weights.reduce((a, b) => a + b, 0) / weights.length).toFixed(1)
+                : '0'
+        })).sort((a, b) => parseFloat(b.avgWeight) - parseFloat(a.avgWeight));
+
+        // Total weight
+        const totalWeight = currentItems.reduce((sum, i) => sum + (i.weight || 0), 0);
+        const todayWeight = todayItems.reduce((sum, i) => sum + (i.weight || 0), 0);
+
+        // Sort distribution for chart (top 5 sorts)
+        const topSorts = Object.entries(sortCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 6);
+
         return {
             today: todayItems.length,
+            todayWeight,
             week: weekItems.length,
             month: monthItems.length,
             total: currentItems.length,
+            totalWeight,
             dailyLabels: Object.keys(dailyData),
             dailyValues: Object.values(dailyData),
             topProducts,
+            avgWeightByProduct,
+            topSorts,
             shipped: shippedCount,
             palletized: palletizedCount,
             inStock: inStockCount
@@ -206,6 +240,54 @@ const AnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({ items, onClose,
                                         </div>
                                     ))}
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Sort Distribution */}
+                    {(stats?.topSorts?.length ?? 0) > 0 && (
+                        <div className="bg-[var(--bg-tertiary)] rounded-xl p-4">
+                            <h3 className="text-sm font-semibold text-[var(--text-secondary)] mb-3 uppercase tracking-wider">
+                                Розподіл по сортах
+                            </h3>
+                            <div className="space-y-2">
+                                {(stats?.topSorts || []).map(([sort, count]) => {
+                                    const maxCount = stats?.topSorts?.[0]?.[1] || 1;
+                                    const percentage = ((count as number) / (maxCount as number)) * 100;
+                                    return (
+                                        <div key={sort} className="flex items-center gap-2">
+                                            <span className="text-[var(--text-primary)] text-sm w-24 truncate">{sort}</span>
+                                            <div className="flex-1 bg-[var(--bg-secondary)] rounded-full h-4 overflow-hidden">
+                                                <div
+                                                    className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full transition-all"
+                                                    style={{ width: `${percentage}%` }}
+                                                />
+                                            </div>
+                                            <span className="text-[var(--text-muted)] font-mono text-sm w-12 text-right">{count}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Average Weight by Product */}
+                    {(stats?.avgWeightByProduct?.length ?? 0) > 0 && (
+                        <div className="bg-[var(--bg-tertiary)] rounded-xl p-4">
+                            <h3 className="text-sm font-semibold text-[var(--text-secondary)] mb-3 uppercase tracking-wider">
+                                Середня вага (кг)
+                            </h3>
+                            <div className="grid grid-cols-2 gap-2">
+                                {(stats?.avgWeightByProduct || []).slice(0, 6).map(({ name, avgWeight }) => (
+                                    <div key={name} className="bg-[var(--bg-secondary)] rounded-lg px-3 py-2 flex justify-between items-center">
+                                        <span className="text-[var(--text-primary)] text-sm truncate flex-1">{name}</span>
+                                        <span className="text-emerald-500 font-bold ml-2">{avgWeight}</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="mt-3 pt-3 border-t border-[var(--border-color)] flex justify-between items-center">
+                                <span className="text-[var(--text-muted)] text-sm">Загальна вага:</span>
+                                <span className="text-[var(--text-primary)] font-bold text-lg">{(stats?.totalWeight || 0).toFixed(1)} кг</span>
                             </div>
                         </div>
                     )}

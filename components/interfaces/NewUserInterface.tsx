@@ -14,6 +14,9 @@ import { NotificationService, NOTIFICATION_THRESHOLD } from '../../services/noti
 import ConfirmDialog from '../ConfirmDialog';
 import ThemeToggle from '../ThemeToggle';
 import { imageToZplGrf } from '../../utils/imageToZpl';
+import LocationSelector from '../warehouse/LocationSelector';
+import { LocationService } from '../../services/locationService';
+
 
 type ViewMode = 'stock' | 'pallets' | 'journal';
 
@@ -45,6 +48,7 @@ export default function NewUserInterface() {
 
     // Dialog states
     const [disbandConfirm, setDisbandConfirm] = useState<{ isOpen: boolean; palletId: string | null }>({ isOpen: false, palletId: null });
+    const [locationModalBatch, setLocationModalBatch] = useState<Batch | null>(null);
     const [alertDialog, setAlertDialog] = useState<{ isOpen: boolean; message: string }>({ isOpen: false, message: '' });
 
     // Load data
@@ -506,10 +510,19 @@ ${itemsZpl}
                                                     <div className="text-lg font-bold text-blue-600">{pallet.totalWeight.toFixed(1)} кг</div>
                                                 </div>
                                             </div>
-                                            <div className="mb-4">
+                                            <div className="mb-4 flex items-center justify-between">
                                                 <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs font-bold">
                                                     {pallet.sort}
                                                 </span>
+                                                <button
+                                                    onClick={() => setLocationModalBatch(pallet)}
+                                                    className={`px-3 py-1 rounded text-xs font-bold transition-all border ${pallet.locationId
+                                                        ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                                                        : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                                                        }`}
+                                                >
+                                                    {pallet.locationId ? '📍 Змінити' : '➕ Місце'}
+                                                </button>
                                             </div>
                                             <div className="flex flex-col gap-2">
                                                 <button
@@ -596,6 +609,44 @@ ${itemsZpl}
                 onCancel={() => setDisbandConfirm({ isOpen: false, palletId: null })}
                 onConfirm={handleDisbandPallet}
             />
+
+            {/* Location Assignment Modal */}
+            {locationModalBatch && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+                        <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                            <h3 className="font-bold text-lg dark:text-white">📍 Локація палети</h3>
+                            <button
+                                onClick={() => setLocationModalBatch(null)}
+                                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="p-4">
+                            <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                                <div className="text-sm text-gray-500 dark:text-gray-400">Палета {locationModalBatch.id}</div>
+                                <div className="font-bold dark:text-white">{locationModalBatch.sort} • {locationModalBatch.totalWeight} кг</div>
+                            </div>
+                            <LocationSelector
+                                value={locationModalBatch.locationId}
+                                onChange={async (locId) => {
+                                    try {
+                                        await LocationService.assignPalletToLocation(locationModalBatch.id, locId);
+                                        // Refresh data
+                                        const newData = await PalletService.getBatches();
+                                        setPallets(newData.filter(p => p.status === 'closed')); // Filter closed only based on logic
+                                        setLocationModalBatch(null);
+                                    } catch (e) {
+                                        console.error('Failed to assign location', e);
+                                        alert('Помилка при збереженні локації');
+                                    }
+                                }}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Alert Dialog */}
             <ConfirmDialog

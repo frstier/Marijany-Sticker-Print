@@ -30,7 +30,13 @@ export interface ProductionItem {
     batchId?: string; // If palletized
     palletizedAt?: string;
 
+    // Warehouse Location
+    locationId?: string;
+    locationCode?: string; // Joined from locations table
+
     // Shipping Data
+    // Shipping Data
+    shipmentId?: string;
     shippedAt?: string;
     updatedAt?: string;
 }

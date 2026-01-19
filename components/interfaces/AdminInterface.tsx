@@ -25,6 +25,7 @@ import AuditLogViewer from '../AuditLogViewer';
 import QRScanner from '../QRScanner';
 import LabelDesigner from '../LabelDesigner';
 import ConfirmDialog from '../ConfirmDialog';
+import LocationSearch from '../warehouse/LocationSearch';
 // import ExcelImportModal from '../modals/ExcelImportModal'; // MOVED TO RECEIVING
 // import PrintHubModal from '../modals/PrintHubModal'; // MOVED TO RECEIVING
 

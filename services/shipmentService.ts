@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient';
 import { Shipment, ShipmentItem, ShipmentStatus, CreateShipmentData, ShipmentSummary } from '../types/shipping';
 import { Batch } from '../types/pallet';
+import { LocationService } from './locationService';
 
 const USE_SUPABASE = true;
 const STORAGE_KEY = 'zebra_shipments_v1';
@@ -313,7 +314,7 @@ export const ShipmentService = {
                 // Also update production_items
                 const { data: batches } = await supabase
                     .from('batches')
-                    .select('id')
+                    .select('id, location_id')
                     .eq('shipment_id', id);
 
                 if (batches) {
@@ -322,6 +323,17 @@ export const ShipmentService = {
                             .from('production_items')
                             .update({ status: 'shipped', shipped_at: new Date().toISOString() })
                             .eq('batch_id', batch.id);
+
+                        // 3. Release Location if exists
+                        if (batch.location_id) {
+                            await LocationService.updateLocationOccupancy(batch.location_id, false);
+
+                            // Clear location_id from batch so it doesn't show up in search
+                            await supabase
+                                .from('batches')
+                                .update({ location_id: null })
+                                .eq('id', batch.id);
+                        }
                     }
                 }
             }

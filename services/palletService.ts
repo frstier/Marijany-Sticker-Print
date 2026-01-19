@@ -209,7 +209,7 @@ export const PalletService = {
                 .from('production_items')
                 .update({
                     batch_id: batchId,
-                    status: 'palletized' // Ensure status is set
+                    // REMOVED: status: 'palletized' - User wants items to remain 'graded' until pallet is closed
                 })
                 .eq('id', item.productionItemId);
 
@@ -320,6 +320,12 @@ export const PalletService = {
                 .from('batches')
                 .update({ status: 'closed', closed_at: new Date().toISOString() })
                 .eq('id', batchId);
+
+            // NEW: Finalize items -> set status to 'palletized'
+            await supabase
+                .from('production_items')
+                .update({ status: 'palletized' })
+                .eq('batch_id', batchId);
 
             const batches = await this.getBatches();
             return batches.find(b => b.id === batchId)!;

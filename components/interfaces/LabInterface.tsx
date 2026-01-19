@@ -7,6 +7,9 @@ import NotificationBanner from '../ui/NotificationBanner';
 import { NotificationService, NOTIFICATION_THRESHOLD } from '../../services/notificationService';
 import ConfirmDialog from '../ConfirmDialog';
 import ThemeToggle from '../ThemeToggle';
+import LocationSelector from '../warehouse/LocationSelector';
+import { LocationService } from '../../services/locationService';
+
 
 export default function LabInterface() {
     const { logout, currentUser } = useAuth();
@@ -337,6 +340,9 @@ export default function LabInterface() {
             setTimeout(() => setLogoutConfirm(false), 3000);
         }
     };
+
+    // Location Modal State
+    const [locationModalItem, setLocationModalItem] = useState<ProductionItem | null>(null);
 
     return (
         <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--bg-primary)' }}>
@@ -787,6 +793,7 @@ export default function LabInterface() {
                                             <th className="p-3 text-right font-bold" style={{ color: 'var(--text-secondary)' }}>Вага</th>
                                             <th className="p-3 text-left font-bold" style={{ color: 'var(--text-secondary)' }}>Дата</th>
                                             <th className="p-3 text-left font-bold" style={{ color: 'var(--text-secondary)' }}>UID</th>
+                                            <th className="p-3 text-left font-bold" style={{ color: 'var(--text-secondary)' }}>Локація</th>
                                             <th className="p-3 text-right font-bold" style={{ color: 'var(--text-secondary)' }}>Дія</th>
                                         </tr>
                                     </thead>
@@ -806,6 +813,17 @@ export default function LabInterface() {
                                                 <td className="p-3 text-right font-mono font-bold" style={{ color: 'var(--text-primary)' }}>{item.weight}</td>
                                                 <td className="p-3" style={{ color: 'var(--text-muted)' }}>{item.date}</td>
                                                 <td className="p-3 font-mono text-xs" style={{ color: 'var(--text-muted)' }}>{item.barcode}</td>
+                                                <td className="p-3">
+                                                    <button
+                                                        onClick={() => setLocationModalItem(item)}
+                                                        className={`px-2 py-1 rounded text-xs font-medium border transition-colors ${item.locationId
+                                                                ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                                                                : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                                                            }`}
+                                                    >
+                                                        {item.locationId ? '📍 Змінити' : '➕ Призначити'}
+                                                    </button>
+                                                </td>
                                                 <td className="p-3 text-right">
                                                     <button
                                                         onClick={() => requestRevertGrade(item)}
@@ -839,6 +857,41 @@ export default function LabInterface() {
                 onCancel={() => setRevertConfirm({ isOpen: false, item: null })}
                 onConfirm={handleRevertGrade}
             />
+            {/* Location Assignment Modal */}
+            {locationModalItem && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+                        <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                            <h3 className="font-bold text-lg dark:text-white">📍 Призначити локацію</h3>
+                            <button
+                                onClick={() => setLocationModalItem(null)}
+                                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="p-4">
+                            <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                                <div className="text-sm text-gray-500 dark:text-gray-400">Бейл №{locationModalItem.serialNumber}</div>
+                                <div className="font-bold dark:text-white">{locationModalItem.productName} ({locationModalItem.sort})</div>
+                            </div>
+                            <LocationSelector
+                                value={locationModalItem.locationId}
+                                onChange={async (locId) => {
+                                    try {
+                                        await LocationService.assignItemToLocation(locationModalItem.id, locId);
+                                        setLocationModalItem(null);
+                                        loadReportData(); // Refresh list to show new location
+                                    } catch (e) {
+                                        console.error('Failed to assign location', e);
+                                        alert('Помилка при збереженні локації');
+                                    }
+                                }}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

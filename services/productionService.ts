@@ -33,7 +33,7 @@ export const ProductionService = {
         try {
             const { data, error } = await supabase
                 .from('production_items')
-                .select('*')
+                .select('*, locations(code)')
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -58,7 +58,9 @@ export const ProductionService = {
                 updatedAt: i.updated_at, // Vital for tracking grading time
                 gradedAt: i.updated_at, // Proxy for gradedAt since we update updated_at on grading
                 importBatchId: i.import_batch_id, // For Print Hub grouping
-                printedAt: i.printed_at // For Print Hub status tracking
+                printedAt: i.printed_at, // For Print Hub status tracking
+                locationId: i.location_id,
+                locationCode: i.locations?.code // Mapped from join
             }));
         } catch (e) {
             console.error("Supabase Fetch Failed, falling back to local", e);
@@ -186,7 +188,8 @@ export const ProductionService = {
     async getGradedItems(): Promise<ProductionItem[]> {
         const items = await this.fetchItems();
         // Return only 'graded' items that are NOT palletized or shipped yet
-        return items.filter(i => i.status === 'graded');
+        // NEW: Also exclude items that are currently in an open pallet (have a batchId)
+        return items.filter(i => i.status === 'graded' && !i.batchId);
     },
 
     async getItemsByBatchId(batchId: string): Promise<ProductionItem[]> {

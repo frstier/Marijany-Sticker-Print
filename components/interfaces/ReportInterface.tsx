@@ -5,6 +5,7 @@ import { ProductionItem } from '../../types/production';
 import * as XLSX from 'xlsx';
 import PrintHubModal from '../modals/PrintHubModal';
 import { EmailService } from '../../services/email';
+import AnalyticsDashboard from '../AnalyticsDashboard';
 
 type StatusFilter = 'all' | 'created' | 'graded' | 'palletized' | 'shipped';
 
@@ -28,7 +29,9 @@ export default function ReportInterface() {
 
     // UI
     const [logoutConfirm, setLogoutConfirm] = useState(false);
+
     const [showPrintHub, setShowPrintHub] = useState(false);
+    const [showAnalytics, setShowAnalytics] = useState(false);
     const printRef = useRef<HTMLDivElement>(null);
 
     // Load data
@@ -444,6 +447,12 @@ export default function ReportInterface() {
                             className="border border-slate-300 rounded-lg px-4 py-2 text-sm w-48"
                         />
                         <button
+                            onClick={() => setShowAnalytics(true)}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-sm transition-all"
+                        >
+                            📈 Аналітика
+                        </button>
+                        <button
                             onClick={() => setShowPrintHub(true)}
                             className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold flex items-center gap-2 shadow-sm transition-all"
                         >
@@ -544,6 +553,13 @@ export default function ReportInterface() {
             {showPrintHub && (
                 <PrintHubModal onClose={() => setShowPrintHub(false)} />
             )}
+
+            {/* Analytics Dashboard */}
+            <AnalyticsDashboard
+                isOpen={showAnalytics}
+                items={items} // Pass all items, dashboard handles filtering if needed
+                onClose={() => setShowAnalytics(false)}
+            />
         </div>
     );
 }

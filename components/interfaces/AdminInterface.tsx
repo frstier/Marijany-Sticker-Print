@@ -27,6 +27,7 @@ import LabelDesigner from '../LabelDesigner';
 import ConfirmDialog from '../ConfirmDialog';
 import LocationSearch from '../warehouse/LocationSearch';
 import InventoryInterface from './InventoryInterface';
+import ApiSettings from '../admin/ApiSettings';
 // import ExcelImportModal from '../modals/ExcelImportModal'; // MOVED TO RECEIVING
 // import PrintHubModal from '../modals/PrintHubModal'; // MOVED TO RECEIVING
 
@@ -67,6 +68,7 @@ export default function AdminInterface() {
     const [showQRScanner, setShowQRScanner] = useState(false);
     const [showLabelDesigner, setShowLabelDesigner] = useState(false);
     const [showInventory, setShowInventory] = useState(false);
+    const [showApiSettings, setShowApiSettings] = useState(false);
 
     // Delete User Confirmation Dialog State
     const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; user: User | null }>({ isOpen: false, user: null });
@@ -1040,6 +1042,16 @@ export default function AdminInterface() {
                                                 <div>Inventory</div>
                                             </div>
                                         </button>
+                                        <button
+                                            onClick={() => setShowApiSettings(true)}
+                                            className="flex items-center gap-3 p-4 bg-gradient-to-br from-cyan-500 to-blue-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
+                                        >
+                                            <span className="text-2xl">🔌</span>
+                                            <div className="text-left">
+                                                <div className="text-sm opacity-80">API</div>
+                                                <div>Dynamics</div>
+                                            </div>
+                                        </button>
                                     </div>
                                 </div>
 
@@ -1159,6 +1171,12 @@ export default function AdminInterface() {
                     <InventoryInterface onBack={() => setShowInventory(false)} />
                 </div>
             )}
+
+            {/* API Settings Modal */}
+            <ApiSettings
+                isOpen={showApiSettings}
+                onClose={() => setShowApiSettings(false)}
+            />
 
             {/* Delete User Confirmation Dialog */}
             <ConfirmDialog

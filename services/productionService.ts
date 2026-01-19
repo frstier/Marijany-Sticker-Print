@@ -176,7 +176,8 @@ export const ProductionService = {
         // Lab only works with:
         const allowed = [
             'Довге волокно', 'Long Fiber',
-            'Коротке волокно', 'Short Fiber'
+            'Коротке волокно', 'Short Fiber',
+            'Костра калібрована', 'Hurds Calibrated'
         ];
 
         return items.filter(i =>

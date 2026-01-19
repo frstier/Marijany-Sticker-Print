@@ -12,7 +12,7 @@ export const IS_OPERATOR_ONLY_BUILD = false; // Set to true: shows only Operator
 export const PRODUCTS: Product[] = [
   { id: '1', name: 'Довге волокно', name_en: 'Long Fiber', sku: 'LF', category: 'fiber', sorts: ['1', '2', '3', '4'] },
   { id: '2', name: 'Коротке волокно', name_en: 'Short Fiber', sku: 'SF', category: 'fiber', sorts: ['1', '2', '3', '4'] },
-  { id: '3', name: 'Костра калібрована', name_en: 'Hurds Calibrated', sku: 'HC', category: 'shiv', sorts: ['-5.0 мм +1.5 мм', '-5.0 мм +0.8 мм', '-1.5 мм +1.0 мм', '-1.5 мм +0.8 мм', '-0.8 мм +0.25 мм', '-1.0 мм', '-0.8 мм', '-0.25 мм'] },
+  { id: '3', name: 'Костра калібрована', name_en: 'Hurds Calibrated', sku: 'HC', category: 'shiv', sorts: ['1', '2', '3'] },
   { id: '4', name: 'Костра некалібрована', name_en: 'Hurds uncalibrated', sku: 'HU', category: 'shiv', sorts: ['1', '2', '3'] },
   { id: '5', name: 'Костра мілкодисперсна', name_en: 'Hurds Finelydisperced', sku: 'HF', category: 'dust' },
   { id: '6', name: 'Висівки насіння', name_en: 'Seed Bran', sku: 'SB', category: 'dust' },

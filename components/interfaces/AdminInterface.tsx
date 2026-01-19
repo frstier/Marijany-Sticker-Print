@@ -216,8 +216,10 @@ export default function AdminInterface() {
             <div className="flex flex-1 overflow-hidden max-w-7xl mx-auto w-full p-4 gap-6">
 
                 {/* Sidebar Navigation */}
-                <aside className="w-64 bg-[var(--bg-card)] rounded-2xl shadow-sm flex flex-col overflow-hidden shrink-0">
-                    <nav className="flex-1 p-4 space-y-2">
+                <aside className="w-72 bg-[var(--bg-card)] rounded-2xl shadow-sm flex flex-col overflow-hidden shrink-0">
+                    <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+                        {/* 📋 ГОЛОВНЕ */}
+                        <div className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest px-3 pt-2 pb-1">📋 Головне</div>
                         <NavButton
                             active={activeTab === 'printer'}
                             onClick={() => setActiveTab('printer')}
@@ -228,19 +230,13 @@ export default function AdminInterface() {
                             active={activeTab === 'database'}
                             onClick={() => setActiveTab('database')}
                             label="База Даних"
-                            icon={<div className="w-6 h-6 flex items-center justify-center font-bold">DB</div>}
+                            icon={<div className="w-6 h-6 flex items-center justify-center font-bold">💾</div>}
                         />
                         <NavButton
                             active={activeTab === 'reports'}
                             onClick={() => setActiveTab('reports')}
-                            label="Звіти & Історія"
+                            label="Звіти & Аналітика"
                             icon={<div className="w-6 h-6 flex items-center justify-center font-bold">📊</div>}
-                        />
-                        <NavButton
-                            active={activeTab === 'users'}
-                            onClick={() => setActiveTab('users')}
-                            label="Користувачі"
-                            icon={<div className="w-6 h-6 flex items-center justify-center font-bold">👥</div>}
                         />
                         <NavButton
                             active={activeTab === 'system'}
@@ -248,19 +244,69 @@ export default function AdminInterface() {
                             label="Система"
                             icon={<SettingsIcon />}
                         />
-                        <div className="border-t border-slate-200 my-3" />
+
+                        {/* 👥 КОРИСТУВАЧІ */}
+                        <div className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest px-3 pt-4 pb-1">👥 Користувачі</div>
+                        <NavButton
+                            active={activeTab === 'users'}
+                            onClick={() => setActiveTab('users')}
+                            label="Керування"
+                            icon={<div className="w-6 h-6 flex items-center justify-center">👤</div>}
+                        />
+
+                        {/* 🏭 ВИРОБНИЦТВО */}
+                        <div className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest px-3 pt-4 pb-1">🏭 Виробництво</div>
                         <button
                             onClick={() => setShowLabelDesigner(true)}
-                            className="w-full flex items-center gap-3 p-3 rounded-xl text-left bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 hover:border-purple-300 transition-all"
+                            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:bg-[var(--bg-tertiary)] transition-all text-[var(--text-secondary)]"
                         >
-                            <span className="text-xl">🎨</span>
-                            <span className="font-medium text-purple-700">Редактор Етикеток</span>
+                            <span className="text-lg">🎨</span>
+                            <span className="text-sm">Редактор етикеток</span>
+                        </button>
+
+                        {/* 🔌 ІНТЕГРАЦІЇ */}
+                        <div className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest px-3 pt-4 pb-1">🔌 Інтеграції</div>
+                        <button
+                            onClick={() => setShowApiSettings(true)}
+                            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:bg-[var(--bg-tertiary)] transition-all text-[var(--text-secondary)]"
+                        >
+                            <span className="text-lg">🔗</span>
+                            <span className="text-sm">API Dynamics</span>
+                        </button>
+                        <button
+                            onClick={() => setShowInventory(true)}
+                            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:bg-[var(--bg-tertiary)] transition-all text-[var(--text-secondary)]"
+                        >
+                            <span className="text-lg">📋</span>
+                            <span className="text-sm">Інвентаризація</span>
+                        </button>
+                        <button
+                            onClick={() => setShowAuditLog(true)}
+                            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:bg-[var(--bg-tertiary)] transition-all text-[var(--text-secondary)]"
+                        >
+                            <span className="text-lg">📜</span>
+                            <span className="text-sm">Аудит-лог</span>
+                        </button>
+                        <button
+                            onClick={() => setShowQRScanner(true)}
+                            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:bg-[var(--bg-tertiary)] transition-all text-[var(--text-secondary)]"
+                        >
+                            <span className="text-lg">📷</span>
+                            <span className="text-sm">QR Сканер</span>
+                        </button>
+                        <button
+                            onClick={() => setShowAnalytics(true)}
+                            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-left hover:bg-[var(--bg-tertiary)] transition-all text-[var(--text-secondary)]"
+                        >
+                            <span className="text-lg">📈</span>
+                            <span className="text-sm">Дашборд</span>
                         </button>
                     </nav>
                     <div className="p-4 bg-[var(--bg-tertiary)] border-t border-[var(--border-color)] text-xs text-[var(--text-muted)] text-center">
                         v0.9 beta
                     </div>
                 </aside>
+
 
                 {/* Main Content Area */}
                 <main className="flex-1 bg-[var(--bg-card)] rounded-2xl shadow-sm overflow-y-auto p-6 relative">
@@ -998,62 +1044,6 @@ export default function AdminInterface() {
                                     </div>
                                 </div>
 
-                                {/* Admin Tools */}
-                                <div className="pt-6 border-t border-[var(--border-color)]">
-                                    <h3 className="text-sm font-bold text-[var(--text-muted)] uppercase tracking-wider mb-4">🛠️ Інструменти</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                        <button
-                                            onClick={() => setShowAnalytics(true)}
-                                            className="flex items-center gap-3 p-4 bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
-                                        >
-                                            <span className="text-2xl">📊</span>
-                                            <div className="text-left">
-                                                <div className="text-sm opacity-80">Аналітика</div>
-                                                <div>Dashboard</div>
-                                            </div>
-                                        </button>
-                                        <button
-                                            onClick={() => setShowAuditLog(true)}
-                                            className="flex items-center gap-3 p-4 bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
-                                        >
-                                            <span className="text-2xl">📋</span>
-                                            <div className="text-left">
-                                                <div className="text-sm opacity-80">Журнал</div>
-                                                <div>Audit Log</div>
-                                            </div>
-                                        </button>
-                                        <button
-                                            onClick={() => setShowQRScanner(true)}
-                                            className="flex items-center gap-3 p-4 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
-                                        >
-                                            <span className="text-2xl">📷</span>
-                                            <div className="text-left">
-                                                <div className="text-sm opacity-80">Сканер</div>
-                                                <div>QR/Barcode</div>
-                                            </div>
-                                        </button>
-                                        <button
-                                            onClick={() => setShowInventory(true)}
-                                            className="flex items-center gap-3 p-4 bg-gradient-to-br from-purple-500 to-violet-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
-                                        >
-                                            <span className="text-2xl">📋</span>
-                                            <div className="text-left">
-                                                <div className="text-sm opacity-80">Інвентаризація</div>
-                                                <div>Inventory</div>
-                                            </div>
-                                        </button>
-                                        <button
-                                            onClick={() => setShowApiSettings(true)}
-                                            className="flex items-center gap-3 p-4 bg-gradient-to-br from-cyan-500 to-blue-600 text-white rounded-xl font-bold hover:shadow-lg transition-all"
-                                        >
-                                            <span className="text-2xl">🔌</span>
-                                            <div className="text-left">
-                                                <div className="text-sm opacity-80">API</div>
-                                                <div>Dynamics</div>
-                                            </div>
-                                        </button>
-                                    </div>
-                                </div>
 
                                 {/* DANGER ZONE */}
                                 <div className="pt-6 border-t-2 border-red-200">
